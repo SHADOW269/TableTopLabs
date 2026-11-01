@@ -1,0 +1,60 @@
+"use client";
+
+import { useActionState, useEffect, useRef } from "react";
+import { addToCart } from "@/app/actions/cart";
+import CartIcon from "@/components/icons/cart-icon";
+import type { AnimatedIconHandle } from "@/components/icons/types";
+
+export function CardAddToCart({
+  productId,
+  disabled,
+}: {
+  productId: string;
+  disabled?: boolean;
+}) {
+  const [state, action, pending] = useActionState(addToCart, null);
+  const cartIconRef = useRef<AnimatedIconHandle>(null);
+
+  useEffect(() => {
+    if (state?.ok) {
+      window.dispatchEvent(new Event("kf-cart-changed"));
+      window.dispatchEvent(
+        new CustomEvent("kf-cart-added", {
+          detail: { count: state.count ?? 0 },
+        }),
+      );
+    }
+  }, [state]);
+
+  return (
+    <form action={action} className="ms-card__atc">
+      <input type="hidden" name="productId" value={productId} />
+      <input type="hidden" name="variantId" value="" />
+      <input type="hidden" name="quantity" value="1" />
+      <button
+        type="submit"
+        className="ms-card__atcbtn"
+        disabled={pending || disabled}
+        title={disabled ? "Out of stock" : "Add to cart"}
+        aria-label={disabled ? "Out of stock" : "Add to cart"}
+        onMouseEnter={() => cartIconRef.current?.startAnimation()}
+        onMouseLeave={() => cartIconRef.current?.stopAnimation()}
+      >
+        {!disabled && (
+          <CartIcon
+            ref={cartIconRef}
+            size={15}
+            strokeWidth={2}
+            className="ms-card__atcicon"
+          />
+        )}
+        <span className="ms-card__atclabel">Cart</span>
+      </button>
+      {state?.error && (
+        <p className="ms-card__atc-err" role="alert">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}

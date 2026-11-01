@@ -1,0 +1,287 @@
+"use server";
+
+import { z } from "zod";
+import { prisma } from "@/lib/db/prisma";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_STAGES } from "@/lib/orders";
+import { outstandingBalance } from "@/lib/payments/refund-accounting";
+import { trackShipment, type TrackingResult } from "@/lib/shipping/delhivery";
+import {
+  actionRateLimited,
+  RATE_LIMIT_ACTION_MESSAGE,
+} from "@/lib/rate-limit/action";
+import {
+  PREVIEW_OPERATION_DISABLED_MESSAGE,
+  previewOperationsAllowed,
+} from "@/lib/config/deployment";
+
+/** Per client, per minute — scanning also costs a live Delhivery call. */
+const RATE_LIMIT = { limit: 30, windowMs: 60_000 };
+
+/**
+ * Reads the public-safe Tracking cache — never the raw Order tables (no
+ * email/phone/address/notes leak). The cache is rebuilt on every admin/order
+ * mutation via lib/tracking.syncTrackingCache.
+ */
+export type TrackTimelineEntry = {
+  status: string;
+  label: string;
+  note: string | null;
+  createdAt: string | null;
+};
+export type TrackLine = {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+export type TrackRepair = {
+  id: string;
+  deviceType: string;
+  deviceModel: string;
+  issue: string;
+};
+export type TrackShipment = {
+  courier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  status: string | null;
+  estimatedDispatchDate: string | null;
+  estimatedDeliveryDate: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+};
+export type TrackMessage = {
+  author: string;
+  message: string;
+  createdAt: string | null;
+};
+export type TrackData = {
+  orderNumber: string;
+  status: string;
+  statusLabel: string;
+  progress: number;
+  paymentStatus: string;
+  total: number;
+  /**
+   * What is still owed, net of refunds. Computed server-side from the order's
+   * payment money columns so the figure on the button is the same one
+   * /api/payments/pay-inline will actually charge.
+   *
+   * Batch 5A. The tracking page used to label its pay button with the order
+   * TOTAL, so a partially paid order was invited to pay the whole amount while
+   * pay-inline charged only the remainder. It now shows the real balance.
+   */
+  outstandingAmount: number;
+  items: TrackLine[];
+  services: TrackLine[];
+  repairs: TrackRepair[];
+  timeline: TrackTimelineEntry[];
+  shipment: TrackShipment | null;
+  messages: TrackMessage[];
+  updatedAt: string | null;
+};
+
+export type TrackState =
+  { ok: true; data: TrackData } | { ok: false; error: string };
+
+export type ShipmentScanState =
+  | {
+      ok: true;
+      awb: string;
+      status: string;
+      destination: string;
+      scans: {
+        location: string;
+        status: string;
+        instructions: string;
+        scannedAt: string | null;
+      }[];
+    }
+  | { ok: false; error: string };
+
+const waybillSchema = z
+  .string()
+  .trim()
+  .refine(
+    (s) => /^\d{10,20}$/.test(s),
+    "That doesn't look like a tracking number.",
+  );
+
+/** Fetches live Delhivery scan data for a shipment waybill. */
+export async function fetchShipmentScans(
+  _prev: ShipmentScanState,
+  formData: FormData,
+): Promise<ShipmentScanState> {
+  // Preview isolation: this action calls Delhivery's live tracking API with the
+  // shared production token and never touches the database, so the database
+  // guard cannot cover it. Refuse before the rate limiter or any provider call.
+  // (trackOrder, the sibling action, only reads the database, so it is already
+  // covered by the database guard and needs no explicit check.)
+  if (!previewOperationsAllowed()) {
+    return { ok: false, error: PREVIEW_OPERATION_DISABLED_MESSAGE };
+  }
+
+  if (await actionRateLimited("track-scans", RATE_LIMIT)) {
+    return { ok: false, error: RATE_LIMIT_ACTION_MESSAGE };
+  }
+
+  const parsed = waybillSchema.safeParse(formData.get("waybill"));;
+  if (!parsed.success)
+    return { ok: false, error: "Please enter a valid tracking number." };
+
+  const result: TrackingResult = await trackShipment(parsed.data);
+  if (!result.ok) return { ok: false, error: result.message };
+
+  return {
+    ok: true,
+    awb: result.data.awb,
+    status: result.data.status,
+    destination: result.data.destination,
+    scans: result.data.scans,
+  };
+}
+
+const orderNumberSchema = z
+  .string()
+  .trim()
+  .transform((s) => s.replace(/[\s-]+/g, "").toUpperCase())
+  .refine(
+    (s) => /^[A-Z0-9]{4,20}$/.test(s),
+    "That doesn't look like an order number — enter the number from your confirmation email (e.g. KF30X2A).",
+  );
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
+}
+function asArray(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+function iso(v: unknown): string | null {
+  if (v instanceof Date) return v.toISOString();
+  return typeof v === "string" && v ? new Date(v).toISOString() : null;
+}
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v : null;
+}
+function num(v: unknown): number {
+  return typeof v === "number" ? v : 0;
+}
+
+export async function trackOrder(
+  _prev: TrackState,
+  formData: FormData,
+): Promise<TrackState> {
+  if (await actionRateLimited("track-order", RATE_LIMIT)) {
+    return { ok: false, error: RATE_LIMIT_ACTION_MESSAGE };
+  }
+
+  const parsed = orderNumberSchema.safeParse(formData.get("orderNumber"));
+  if (!parsed.success)
+    return {
+      ok: false,
+      error:
+        parsed.error.issues[0]?.message ?? "Please enter a valid order number.",
+    };
+
+  const row = await prisma.tracking.findUnique({
+    where: { orderNumber: parsed.data },
+  });
+  if (!row) {
+    return {
+      ok: false,
+      error: `No order was found for "${parsed.data}". Double-check the number, or contact us and we'll look it up for you.`,
+    };
+  }
+
+  const shipmentRaw = row.shipment == null ? null : asRecord(row.shipment);
+
+  const repairsRaw = asArray(row.repairs);
+  const repairRows = repairsRaw.map((rp) => asRecord(rp));
+
+  // The one deliberate exception to "reads the cache, never the Order tables".
+  //
+  // The cache carries `paymentStatus` and `total` but nothing about how much of
+  // the total was actually paid, so the outstanding balance cannot be derived from
+  // it. Reading only money columns keeps the privacy property this file exists to
+  // protect — no email, phone, address or notes are selected, and nothing beyond
+  // three integer columns leaves the database — while letting the customer see the
+  // real balance instead of the order total.
+  //
+  // Indexed by orderId and at most a handful of rows per order.
+  const paymentMoney = await prisma.payment.findMany({
+    where: { orderId: row.orderId },
+    select: { amount: true, status: true, refundedAmount: true },
+  });
+
+  return {
+    ok: true,
+    data: {
+      orderNumber: row.orderNumber,
+      status: row.status,
+      statusLabel: ORDER_STATUS_LABELS[row.status] ?? row.status,
+      progress: ORDER_STATUS_STAGES[row.status] ?? 0,
+      paymentStatus: row.paymentStatus,
+      total: row.total,
+      outstandingAmount: outstandingBalance({
+        total: row.total,
+        payments: paymentMoney,
+      }),
+      items: asArray(row.items).map((it) => {
+        const r = asRecord(it);
+        return {
+          name: str(r.name) ?? "Item",
+          quantity: num(r.quantity),
+          unitPrice: num(r.unitPrice),
+          lineTotal: num(r.lineTotal),
+        };
+      }),
+      services: asArray(row.services).map((s) => {
+        const r = asRecord(s);
+        return {
+          name: str(r.name) ?? "Service",
+          quantity: num(r.quantity),
+          unitPrice: num(r.unitPrice),
+          lineTotal: num(r.lineTotal),
+        };
+      }),
+      repairs: repairRows.map((r) => ({
+        id: str(r.id) ?? "",
+        deviceType: str(r.deviceType) ?? "",
+        deviceModel: str(r.deviceModel) ?? "",
+        issue: str(r.issue) ?? "",
+      })),
+      timeline: asArray(row.timeline).map((t) => {
+        const r = asRecord(t);
+        return {
+          status: str(r.status) ?? "",
+          label: str(r.label) ?? "Update",
+          note: str(r.note),
+          createdAt: iso(r.createdAt),
+        };
+      }),
+      shipment: shipmentRaw
+        ? {
+            courier: str(shipmentRaw.courier),
+            trackingNumber: str(shipmentRaw.trackingNumber),
+            trackingUrl: str(shipmentRaw.trackingUrl),
+            status: str(shipmentRaw.status),
+            estimatedDispatchDate: iso(shipmentRaw.estimatedDispatchDate),
+            estimatedDeliveryDate: iso(shipmentRaw.estimatedDeliveryDate),
+            shippedAt: iso(shipmentRaw.shippedAt),
+            deliveredAt: iso(shipmentRaw.deliveredAt),
+          }
+        : null,
+      messages: asArray(row.messages).map((m) => {
+        const r = asRecord(m);
+        return {
+          author: str(r.author) ?? "Team",
+          message: str(r.message) ?? "",
+          createdAt: iso(r.createdAt),
+        };
+      }),
+      updatedAt: iso(row.updatedAt),
+    },
+  };
+}

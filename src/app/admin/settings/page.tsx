@@ -1,0 +1,168 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import { requirePermission } from "@/lib/auth/admin";
+import { getSiteSetting } from "@/lib/catalog/data";
+import { MAINTENANCE_KEY, DEVELOPMENT_NOTICE_KEY } from "@/lib/config/environment";
+import { readEmailSettings } from "@/lib/email/email-settings";
+import { MaintenanceModeCard } from "./MaintenanceModeCard";
+import { DevelopmentNoticeCard } from "./DevelopmentNoticeCard";
+import { EmailNotificationsCard } from "./EmailNotificationsCard";
+
+export const metadata: Metadata = {
+  title: "Settings | TableTopLabs Admin",
+  robots: { index: false, follow: false },
+};
+
+export default async function AdminSettingsPage() {
+  await requirePermission("setting", "view");
+
+  const [productionEnabled, developmentNoticeEnabled, emailSettings] =
+    await Promise.all([
+      (await getSiteSetting(MAINTENANCE_KEY)) === true,
+      (await getSiteSetting(DEVELOPMENT_NOTICE_KEY)) === true,
+      readEmailSettings(),
+    ]);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 24,
+        maxWidth: 960,
+      }}
+    >
+      <div>
+        <span className="sec-num">{"// System Settings"}</span>
+      </div>
+
+      <div>
+        <h2
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontSize: "1.05rem",
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            marginBottom: 12,
+          }}
+        >
+          Catalog
+        </h2>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Link
+            href="/admin/settings/brands"
+            className="admin-card"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              textDecoration: "none",
+            }}
+          >
+            <span style={{ fontSize: "1.4rem" }}>🏷️</span>
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  fontFamily: "var(--ff-display)",
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
+                  color: "var(--t1)",
+                }}
+              >
+                Brands
+              </div>
+              <div className="muted" style={{ fontSize: "0.8rem" }}>
+                Manage brand catalogue
+              </div>
+            </div>
+            <span className="btn-admin sm">Open →</span>
+          </Link>
+          <Link
+            href="/admin/settings/categories"
+            className="admin-card"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              textDecoration: "none",
+            }}
+          >
+            <span style={{ fontSize: "1.4rem" }}>🗂️</span>
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  fontFamily: "var(--ff-display)",
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
+                  color: "var(--t1)",
+                }}
+              >
+                Categories
+              </div>
+              <div className="muted" style={{ fontSize: "0.8rem" }}>
+                Manage product categories
+              </div>
+            </div>
+            <span className="btn-admin sm">Open →</span>
+          </Link>
+        </div>
+      </div>
+
+      <div>
+        <h2
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontSize: "1.05rem",
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            marginBottom: 12,
+          }}
+        >
+          Maintenance Mode
+        </h2>
+      </div>
+
+      <MaintenanceModeCard
+        name="KEEBFORGE.IN"
+        url="https://keebforge.in"
+        enabled={productionEnabled}
+        prominent
+        confirmationTitle="Enable production maintenance?"
+        confirmationBody="Visitors to keebforge.in will temporarily be unable to access the website."
+      />
+
+      <div>
+        <h2
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontSize: "1.05rem",
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            marginBottom: 12,
+          }}
+        >
+          Development Notice
+        </h2>
+      </div>
+
+      <DevelopmentNoticeCard enabled={developmentNoticeEnabled} />
+
+      <div>
+        <h2
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontSize: "1.05rem",
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            marginBottom: 12,
+          }}
+        >
+          Email Notifications
+        </h2>
+      </div>
+
+      <EmailNotificationsCard read={emailSettings} />
+    </div>
+  );
+}

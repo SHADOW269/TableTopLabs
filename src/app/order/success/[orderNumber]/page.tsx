@@ -1,0 +1,593 @@
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import Link from "next/link";
+import Image from "next/image";
+import { formatINR } from "@/lib/utils/money";
+import { prisma } from "@/lib/db/prisma";
+import { getCurrentAuth } from "@/lib/auth/session";
+import { SERVICE_UNIT_LABELS } from "@/lib/orders";
+import { buildMetadata } from "@/lib/seo";
+import { CopyPaymentId } from "@/components/order/CopyPaymentId";
+import { OrderPaymentSummary } from "@/components/order/OrderPaymentSummary";
+import {
+  canPayFromCookie,
+} from "@/lib/payments/order-access";
+
+// Defence in depth. The page is already forced dynamic by awaiting
+// `searchParams` + `headers()` + a Prisma query, but stating it explicitly
+// matches /track-order and means a future refactor that removes one of those
+// signals cannot silently turn an order page into a cached artifact.
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orderNumber: string }>;
+}): Promise<Metadata> {
+  const { orderNumber } = await params;
+  // noIndex: this page is reachable by order number, which the app treats as a
+  // public identifier — it must never enter an index. The title/description are
+  // deliberately generic too: og:* tags are scraped by third parties whenever
+  // the URL is shared, and must not carry order data. Canonical still points at
+  // this exact URL so the page has one stable identity.
+  return buildMetadata({
+    title: "Order Confirmed | TableTopLabs",
+    description:
+      "Your TableTopLabs order has been received. Sign in to view the full order, or track it with your order number.",
+    path: `/order/success/${orderNumber}`,
+    noIndex: true,
+  });
+}
+
+type ServiceSummaryLine = {
+  serviceName?: string;
+  quantity?: number;
+  unitPrice?: number | null;
+  isQuote?: boolean;
+};
+
+function deviceRows(summary: unknown): Array<[string, string]> {
+  if (!summary || typeof summary !== "object") return [];
+  const s = summary as Record<string, unknown>;
+  const rows: Array<[string, string]> = [];
+  const push = (k: string, v: unknown) => {
+    if (typeof v === "string" && v.trim()) rows.push([k, v]);
+    else if (typeof v === "number") rows.push([k, String(v)]);
+    else if (typeof v === "boolean")
+      rows.push([k, v ? "Included" : "Not Included"]);
+  };
+  if (s.deviceType === "KEYBOARD" || s.deviceType === "MOUSE") {
+    rows.push(["Device", s.deviceType === "KEYBOARD" ? "Keyboard" : "Mouse"]);
+    rows.push([
+      "Unit",
+      [s.brand, s.model].filter((v) => typeof v === "string" && v).join(" "),
+    ]);
+    push("Layout", s.layout);
+    push("Switch model", s.switchModel);
+    if (typeof s.switchQuantity === "number")
+      rows.push(["Switches", String(s.switchQuantity)]);
+    if (typeof s.stabilizerQuantity === "number" && s.stabilizerQuantity > 0)
+      rows.push(["Stabilizers", String(s.stabilizerQuantity)]);
+    push("Keycaps", s.keycapsIncluded);
+  }
+  return rows;
+}
+
+/**
+ * Shown when the visitor holds neither the order's guest payment capability nor
+ * an owning session. It confirms that the URL resolves — which is what a guest
+ * who closed the tab needs — and nothing else. No name, email, phone, address,
+ * items, services, prices, totals, payment id or device configuration, and no
+ * wording that hints at whether the customer's email has an account.
+ */
+function OrderUnverified() {
+  return (
+    <main>
+      <section className="svc-section order-success-page">
+        <div className="wrap">
+          <header className="order-success-hero">
+            <p className="order-success-eyebrow">{"// Order"}</p>
+            <div
+              className="order-success-check"
+              aria-hidden="true"
+              style={{ borderColor: "var(--bdr-h)" }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--acc)"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <h1 className="order-success-title">Order received</h1>
+            <p className="order-success-sub">
+              This page shows full order details only to the customer who placed
+              it.
+            </p>
+          </header>
+
+          <div className="os-process-box">
+            <p className="os-process-text">
+              To see your items, delivery address and receipt,{" "}
+              <Link href="/auth/login" style={{ color: "var(--acc)" }}>
+                sign in
+              </Link>{" "}
+              to the account that placed the order. If you checked out as a guest
+              or no longer have access, contact our support team with your order
+              number and the email address you used and we&apos;ll help you open
+              it.
+            </p>
+          </div>
+
+          <div className="os-actions">
+            <Link href="/track-order" className="btn-prime btn-sm">
+              Track an order
+            </Link>
+            <Link href="/contact" className="btn-ghost btn-sm">
+              Contact Support
+            </Link>
+          </div>
+
+          <p className="os-support">
+            Need help? <Link href="/contact">Contact our support team</Link>.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export default async function OrderSuccessPage({
+  params,
+}: {
+  params: Promise<{ orderNumber: string }>;
+}) {
+  const { orderNumber } = await params;
+  const { user, profile } = await getCurrentAuth();
+
+  // Entitlement arrives as an HttpOnly cookie, not a URL parameter — so this
+  // page renders on a clean, shareable URL with nothing secret in the address
+  // bar, browser history or Referer header. The cookie is matched against the
+  // stored hash before anything customer-specific is rendered.
+  const order = await prisma.order.findUnique({
+    where: { orderNumber: orderNumber.toUpperCase(), isDeleted: false },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: {
+              images: {
+                where: { active: true },
+                orderBy: [{ primary: "desc" }, { sortOrder: "asc" }],
+                take: 1,
+              },
+            },
+          },
+        },
+      },
+      services: true,
+      payments: { orderBy: { createdAt: "desc" }, take: 1 },
+      shippingAddress: true,
+    },
+  });
+
+  // Soft-deleted orders are excluded by the query above, so they 404 here
+  // exactly like an unknown number — no separate "deleted" response that would
+  // confirm the order ever existed.
+  if (!order) notFound();
+
+  const canPay = await canPayFromCookie(order.billingDetails);
+
+  // Must be the profile that owns THIS order: a signed-in stranger stays
+  // unauthorized, and a guest order (profileId null) is owned by nobody.
+  const ownedBySession = Boolean(
+    profile && order.profileId && profile.id === order.profileId,
+  );
+
+  // Same predicate as isEntitledToPay in lib/payments/pay-inline-core, so a
+  // token that can pay for an order is a token that can view it, and a session
+  // that can pay is a session that can view.
+  const authorized = canPay || ownedBySession;
+
+  if (!authorized) return <OrderUnverified />;
+
+  const payment = order.payments[0];
+  const paid = order.paymentStatus === "PAID";
+  const isService = order.type === "SERVICE";
+  const quoteRequest = isService && !paid && order.subtotal === 0;
+
+  // Quote flags come from the creation snapshot so zero-priced rows stay honest.
+  const summaryServices = Array.isArray(
+    (order.summary as { services?: ServiceSummaryLine[] } | null)?.services,
+  )
+    ? (order.summary as { services: ServiceSummaryLine[] }).services
+    : [];
+  const isQuoteLine = (slug: string) =>
+    summaryServices.some(
+      (l) =>
+        typeof l.serviceName === "string" &&
+        l.isQuote &&
+        l.serviceName === slug,
+    );
+
+  const headline = paid
+    ? "Payment successful!"
+    : quoteRequest
+      ? "Quote request received"
+      : "Order received";
+  const subline = quoteRequest
+    ? "We've received your configuration. Final pricing will be confirmed after inspection — no payment was taken."
+    : null;
+
+  const deviceRowsOut = deviceRows(order.summary);
+
+  const grandLabel = paid ? "Total Paid" : quoteRequest ? "Due Now" : "Total";
+
+  return (
+    <main>
+      <section className="svc-section order-success-page">
+        <div className="wrap">
+          <header className="order-success-hero">
+            <p className="order-success-eyebrow">{"// Order Confirmed"}</p>
+            <div
+              className="order-success-check"
+              aria-hidden="true"
+              style={paid ? undefined : { borderColor: "var(--bdr-h)" }}
+            >
+              {paid ? (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--acc)"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--acc)"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+            </div>
+            <h1 className="order-success-title">{headline}</h1>
+            <p className="order-success-sub">{subline}</p>
+            <p className="order-success-order">
+              <span className="order-success-order-label">Order number</span>
+              <b>{order.orderNumber}</b>
+            </p>
+          </header>
+
+          <div className="os-section-head">
+            <h2 className="os-section-title">Your Order</h2>
+            <span className="os-section-rule" aria-hidden="true" />
+          </div>
+
+          <div className="os-grid">
+            <div className="os-col">
+              {order.shippingAddress ? (
+                <div className="card p-6 os-card-fill">
+                  <div className="os-card-head">
+                    <h2 className="os-card-title">Delivery Address</h2>
+                  </div>
+                  <div className="os-addr-block">
+                    <div className="os-addr-recipient">
+                      <svg
+                        className="os-addr-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                      <span className="os-addr-name">{order.customerName}</span>
+                    </div>
+                    <address className="os-address">
+                      {order.shippingAddress.apartment && (
+                        <span>{order.shippingAddress.apartment}</span>
+                      )}
+                      <span className="os-addr-home">
+                        {order.shippingAddress.streetAddress}
+                      </span>
+                      <span>
+                        {order.shippingAddress.city},{" "}
+                        {order.shippingAddress.state}{" "}
+                        {order.shippingAddress.postalCode}
+                      </span>
+                      <span>{order.shippingAddress.country}</span>
+                    </address>
+                    {/* No phone. The customer just typed it into checkout, so
+                        echoing it adds no confirmation value while widening the
+                        PII on this URL. */}
+                  </div>
+                </div>
+              ) : (
+                <div className="card p-6 os-card-fill">
+                  <div className="os-card-head">
+                    <h2 className="os-card-title">Customer</h2>
+                  </div>
+                  <dl className="os-customer">
+                    <div>
+                      <dt>Name</dt>
+                      <dd>{order.customerName}</dd>
+                    </div>
+                    <div>
+                      <dt>Email</dt>
+                      <dd>{order.customerEmail}</dd>
+                    </div>
+                  </dl>
+                </div>
+              )}
+            </div>
+
+            <div className="os-col">
+              <div className="card p-6 os-card-fill">
+                <div className="os-card-head">
+                  <h2 className="os-card-title">Order Summary</h2>
+                </div>
+                {isService && deviceRowsOut.length > 0 && (
+                  <div className="os-device">
+                    <h3 className="os-device-title">Device</h3>
+                    <dl className="os-device-rows">
+                      {deviceRowsOut.map(([k, v]) => (
+                        <div key={k} className="os-device-row">
+                          <dt>{k}</dt>
+                          <dd>{v}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
+                <ul className="os-lines">
+                  {order.services.map((svc) => {
+                    const quote = svc.lineTotal === 0 && isQuoteLine(svc.slug);
+                    return (
+                      <li key={svc.id} className="os-line">
+                        <div className="os-line-main">
+                          <div className="min-w-0">
+                            <p className="os-line-name">{svc.name}</p>
+                            <p className="os-line-meta">
+                              {quote
+                                ? "QUOTE REQUIRED"
+                                : `${svc.quantity} × ${formatINR(svc.unitPrice)} ${SERVICE_UNIT_LABELS[svc.unit]}`}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="os-line-total">
+                          {quote ? (
+                            <span className="quote-chip">QUOTE</span>
+                          ) : (
+                            formatINR(svc.lineTotal)
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {order.items.map((item) => {
+                    const vi = item.variantInfo as
+                      | {
+                          kind?: string;
+                          selections?: Array<{
+                            groupName?: string;
+                            optionName?: string;
+                            addon?: number;
+                          }>;
+                        }
+                      | null
+                      | undefined;
+                    const optionSelections =
+                      vi?.kind === "options" && Array.isArray(vi.selections)
+                        ? vi.selections
+                        : [];
+                    const optionId = (o: number) => `opt-${item.id}-${o}`;
+                    return (
+                      <li key={item.id} className="os-line">
+                        <div className="os-line-main">
+                          {item.product?.images?.[0] ? (
+                            <Image
+                              src={item.product.images[0].url}
+                              alt={item.product.name}
+                              width={46}
+                              height={46}
+                              className="os-line-thumb"
+                              sizes="46px"
+                            />
+                          ) : (
+                            <span
+                              className="os-line-thumb os-line-thumb-fallback"
+                              aria-hidden="true"
+                            >
+                              ⌨
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="os-line-name">
+                              {item.product?.name ?? item.name}
+                            </p>
+                            <p className="os-line-meta">
+                              Qty {item.quantity} · {formatINR(item.unitPrice)}{" "}
+                              each
+                            </p>
+                            {optionSelections.length > 0 && (
+                              <ul className="os-line-options">
+                                {optionSelections.map((s, i) => (
+                                  <li key={optionId(i)}>
+                                    <span className="os-line-option-group">
+                                      {s.groupName}:
+                                    </span>{" "}
+                                    {s.optionName}
+                                    {typeof s.addon === "number" &&
+                                      s.addon > 0 && (
+                                        <span className="os-line-option-addon">
+                                          {" "}
+                                          (+{formatINR(s.addon)})
+                                        </span>
+                                      )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                        <span className="os-line-total">
+                          {formatINR(item.lineTotal)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <dl className="os-totals">
+                  <div className="os-total-row">
+                    <dt>Subtotal</dt>
+                    <dd>
+                      {order.subtotal === 0 ? "—" : formatINR(order.subtotal)}
+                    </dd>
+                  </div>
+                  {order.discount > 0 && (
+                    <div className="os-total-row os-total-discount">
+                      <dt>Discount</dt>
+                      <dd>−{formatINR(order.discount)}</dd>
+                    </div>
+                  )}
+                  <div className="os-total-row">
+                    <dt>Shipping</dt>
+                    <dd>
+                      {order.shipping === 0
+                        ? order.type === "PRODUCT" && !quoteRequest
+                          ? "FREE"
+                          : "Calculated later"
+                        : formatINR(order.shipping)}
+                    </dd>
+                  </div>
+                  <div className="os-total-grand">
+                    <dt>{grandLabel}</dt>
+                    <dd>
+                      {paid
+                        ? formatINR(order.total)
+                        : quoteRequest
+                          ? "—"
+                          : formatINR(order.total)}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="os-pay-block">
+                  {paid ? (
+                    <div className="os-pay-line">
+                      <span className="os-pay-line-label">Payment</span>
+                      <span className="badge badge-lime">Paid ✓</span>
+                      {payment?.razorpayPaymentId && (
+                        <>
+                          <span className="os-pay-grow" aria-hidden="true" />
+                          <span className="os-pay-id">
+                            {payment.razorpayPaymentId}
+                          </span>
+                          <CopyPaymentId value={payment.razorpayPaymentId} />
+                        </>
+                      )}
+                    </div>
+                  ) : quoteRequest ? (
+                    <div className="os-pay-line">
+                      <span className="os-pay-line-label">Payment</span>
+                      <span className="os-pay-line-pending">Pending</span>
+                      <p className="os-pay-note">
+                        Amount will be confirmed shortly.
+                      </p>
+                    </div>
+                  ) : (
+                    <OrderPaymentSummary
+                      orderNumber={order.orderNumber}
+                      total={order.total}
+                      // Still gated on canPay alone: this branch is reachable
+                      // by an owning session that presented no cookie, and a
+                      // rejected cookie must never reach the payment client.
+                      canPay={canPay}
+                      ownedBySession={ownedBySession}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="os-section-head">
+            <h2 className="os-section-title">What happens next?</h2>
+            <span className="os-section-rule" aria-hidden="true" />
+          </div>
+
+          <div className="os-process-box">
+            <ol className="os-process">
+              <li className="os-process-step">
+                <span className="os-process-num">01</span>
+                <h3 className="os-process-title">Confirmation</h3>
+                <p className="os-process-text">
+                  We&apos;ll email your order confirmation &amp; receipt to{" "}
+                  <b>{order.customerEmail}</b>.
+                </p>
+              </li>
+              <li className="os-process-step">
+                <span className="os-process-num">02</span>
+                <h3 className="os-process-title">Processing</h3>
+                <p className="os-process-text">
+                  Our team reviews your order and starts working on it.
+                </p>
+              </li>
+              <li className="os-process-step">
+                <span className="os-process-num">03</span>
+                <h3 className="os-process-title">Tracking</h3>
+                <p className="os-process-text">
+                  Track your order from your TableTopLabs account.
+                </p>
+              </li>
+            </ol>
+          </div>
+
+          <div className="os-actions">
+            {user ? (
+              <Link href="/account/orders" className="btn-prime btn-sm">
+                View Order <span aria-hidden="true">&rarr;</span>
+              </Link>
+            ) : (
+              <Link href="/contact" className="btn-prime btn-sm">
+                Contact Us
+              </Link>
+            )}
+            <Link href="/" className="btn-ghost btn-sm">
+              Back to Home
+            </Link>
+          </div>
+          {!user && (
+            <p className="os-cta-note">
+              Keep this order number for your records — you&apos;ll need it for
+              any support request.
+            </p>
+          )}
+
+          <p className="os-support">
+            Need help? <Link href="/contact">Contact our support team</Link>.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}

@@ -1,0 +1,237 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import { requirePermission } from "@/lib/auth/admin";
+import { prisma } from "@/lib/db/prisma";
+import { formatINR } from "@/lib/utils/money";
+import { fmtIST } from "@/lib/utils/ist";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { ADMIN_PAGE_SIZE, paginate, parsePage } from "@/lib/admin/pagination";
+
+export const metadata: Metadata = {
+  title: "Payments | TableTopLabs Admin",
+  robots: { index: false, follow: false },
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  PAID: "badge-ok",
+  PARTIALLY_PAID: "badge-warn",
+  PENDING: "badge-warn",
+  FAILED: "badge-err",
+  REFUNDED: "badge-purple",
+};
+
+function methodLabel(m: string | null): string {
+  if (!m) return "—";
+  return m
+    .toLowerCase()
+    .split(/[_ -]/)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(" ");
+}
+
+export default async function AdminPaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  await requirePermission("order", "view");
+  const sp = await searchParams;
+
+  const page = parsePage(
+    typeof sp.page === "string" ? sp.page : sp.page?.[0],
+  );
+
+  const { items: payments, total, page: current, pages: totalPages } =
+    await Promise.all([
+      prisma.payment.count(),
+      prisma.payment.findMany({
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          razorpayPaymentId: true,
+          razorpayCustomerId: true,
+          amount: true,
+          status: true,
+          method: true,
+          createdAt: true,
+          order: {
+            select: {
+              orderNumber: true,
+              customerName: true,
+              customerEmail: true,
+            },
+          },
+        },
+        skip: (page - 1) * ADMIN_PAGE_SIZE,
+        take: ADMIN_PAGE_SIZE,
+      }),
+    ]).then(([total, items]) => paginate(items, total, page));
+
+  const summary = await prisma.payment.groupBy({
+    by: ["status"],
+    _sum: { amount: true },
+    _count: { _all: true },
+  });
+
+  const stat = (s: string) => summary.find((r) => r.status === s);
+  const collected = stat("PAID")?._sum.amount ?? 0;
+  const pending =
+    (stat("PENDING")?._sum.amount ?? 0) +
+    (stat("PARTIALLY_PAID")?._sum.amount ?? 0);
+  const failed = stat("FAILED")?._sum.amount ?? 0;
+  const refunded = stat("REFUNDED")?._sum.amount ?? 0;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 10,
+        }}
+      >
+        <h1
+          style={{
+            fontFamily: "var(--ff-display)",
+            fontSize: "1.35rem",
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Payments <span className="muted num">({total})</span>
+        </h1>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 12,
+        }}
+      >
+        <div className="admin-stat lime">
+          <b>{formatINR(collected)}</b>
+          <span>Collected (Paid)</span>
+        </div>
+        <div className="admin-stat warn">
+          <b>{formatINR(pending)}</b>
+          <span>Pending</span>
+        </div>
+        <div className="admin-stat err">
+          <b>{formatINR(failed)}</b>
+          <span>Failed</span>
+        </div>
+        <div className="admin-stat purple">
+          <b>{formatINR(refunded)}</b>
+          <span>Refunded</span>
+        </div>
+      </div>
+
+      <div className="admin-card" style={{ overflow: "auto" }}>
+        <table className="admin-table" style={{ width: "100%" }}>
+          <thead>
+            <tr>
+              <th>Payment</th>
+              <th>Order</th>
+              <th>Customer</th>
+              <th>Date</th>
+              <th>Method</th>
+              <th className="num">Amount</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payments.map((p) => (
+              <tr key={p.id}>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <span
+                    className="num"
+                    style={{ fontFamily: "var(--ff-mono, monospace)" }}
+                  >
+                    #{p.id.slice(0, 8)}
+                  </span>
+                  <div className="muted" style={{ fontSize: "0.68rem" }}>
+                    {p.razorpayPaymentId ?? ""}
+                  </div>
+                  {p.razorpayCustomerId && (
+                    <div
+                      className="muted"
+                      style={{ fontSize: "0.68rem" }}
+                      title={`Razorpay customer: ${p.razorpayCustomerId}`}
+                    >
+                      {p.razorpayCustomerId}
+                    </div>
+                  )}
+                </td>
+                <td>
+                  <a
+                    href={`/admin/orders/${p.order.orderNumber}`}
+                    className="muted"
+                    style={{ textDecoration: "underline" }}
+                  >
+                    {p.order.orderNumber}
+                  </a>
+                </td>
+                <td>
+                  <div style={{ fontSize: "0.82rem" }}>
+                    {p.order.customerName || p.order.customerEmail}
+                  </div>
+                  {p.order.customerName && p.order.customerEmail && (
+                    <div className="muted" style={{ fontSize: "0.7rem" }}>
+                      {p.order.customerEmail}
+                    </div>
+                  )}
+                </td>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>
+                  {fmtIST(p.createdAt, {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </td>
+                <td>{methodLabel(p.method)}</td>
+                <td className="num" style={{ fontWeight: 600 }}>
+                  {formatINR(p.amount)}
+                </td>
+                <td>
+                  <span
+                    className={`badge ${STATUS_BADGE[p.status] ?? ""}`}
+                    style={{ fontSize: "0.65rem", padding: "2px 8px" }}
+                  >
+                    {p.status.replace("_", " ")}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {payments.length === 0 && (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="muted"
+                  style={{ textAlign: "center", padding: 30 }}
+                >
+                  No payments yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <AdminPagination
+        page={current}
+        pages={totalPages}
+        total={total}
+        searchParams={sp}
+        basePath="/admin/payments"
+        unit="payments"
+      />
+
+      <Link href="/admin" className="muted" style={{ fontSize: "0.75rem" }}>
+        ← Dashboard
+      </Link>
+    </div>
+  );
+}

@@ -1,0 +1,313 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
+import type { ShopProduct } from "@/lib/catalog/data";
+
+interface ProductGalleryProps {
+  images: ShopProduct["images"];
+  productName: string;
+  variantImages?: ShopProduct["images"];
+}
+
+/**
+ * The shop card's plate, opened out to full scale: one large photograph on a
+ * near-black charcoal plate, a hairline rim that follows the chamfered
+ * corners, a soft vignette, corner ticks and a small image counter. The
+ * thumbnails sit underneath in the same sharp-cornered language.
+ */
+export function ProductGallery({
+  images,
+  productName,
+  variantImages,
+}: ProductGalleryProps) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  // The initial (LCP) image renders at full opacity with no transition so it
+  // can paint immediately; gallery transitions only begin after the customer
+  // actually switches images, and even then they are short (150ms).
+  const [interacted, setInteracted] = useState(false);
+
+  const allImages = variantImages?.length ? variantImages : images;
+  const currentImage = allImages[selectedIndex];
+
+  const select = useCallback(
+    (i: number) => {
+      setSelectedIndex(((i % allImages.length) + allImages.length) % allImages.length);
+      setInteracted(true);
+    },
+    [allImages.length],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (!isFullscreen) return;
+      if (e.key === "ArrowLeft") {
+        select(selectedIndex - 1);
+      } else if (e.key === "ArrowRight") {
+        select(selectedIndex + 1);
+      } else if (e.key === "Escape") {
+        setIsFullscreen(false);
+      }
+    },
+    [isFullscreen, select, selectedIndex],
+  );
+
+  useEffect(() => {
+    if (isFullscreen) {
+      window.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [isFullscreen, handleKeyDown]);
+
+  const nextImage = () => select(selectedIndex + 1);
+  const prevImage = () => select(selectedIndex - 1);
+
+  if (allImages.length === 0) {
+    return (
+      <div className="ms-pdp__gallery">
+        <div
+          className="ms-pdp__gallery-fallback"
+          role="img"
+          aria-label="No product image available"
+        >
+          {Array.from(productName)[0]?.toUpperCase()}
+        </div>
+      </div>
+    );
+  }
+
+  const fadeCls = interacted ? "transition-opacity duration-150" : "";
+
+  return (
+    <div className="ms-pdp__gallery">
+      <div className="ms-pdp__frame">
+        {/* The plate is not a widget: the arrow keys and the expand control
+           inside it are real buttons, and a role="button" wrapper would
+           nest interactive controls inside another one. The click handler is
+           a mouse convenience — the expand button is the accessible path. */}
+        <div className="ms-pdp__stage" onClick={() => setIsFullscreen(true)}>
+          {allImages.map((img, i) => (
+            <Image
+              key={i}
+              src={img.url}
+              alt={img.alt ?? productName}
+              fill
+              priority={i === 0}
+              sizes="(min-width: 1320px) 50vw, (min-width: 1024px) 52vw, 100vw"
+              className={`ms-pdp__img ${fadeCls}`}
+              style={{ opacity: i === selectedIndex ? 1 : 0 }}
+              aria-hidden={i !== selectedIndex}
+            />
+          ))}
+
+          {/* Plate overlays: vignette, corner ticks, stamp. */}
+          <span className="ms-pdp__veil" aria-hidden="true" />
+          <span className="ms-pdp__marks" aria-hidden="true" />
+          <span className="ms-pdp__stamp" aria-hidden="true">
+            TableTopLabs
+          </span>
+
+          {allImages.length > 1 && (
+            <div className="ms-pdp__nav">
+              <button
+                className="ms-pdp__navbtn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  prevImage();
+                }}
+                aria-label="Previous image"
+              >
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <button
+                className="ms-pdp__navbtn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  nextImage();
+                }}
+                aria-label="Next image"
+              >
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {allImages.length > 1 && (
+            <div className="ms-pdp__counter" aria-hidden="true">
+              {selectedIndex + 1} / {allImages.length}
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="ms-pdp__expand"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsFullscreen(true);
+            }}
+            aria-label={`Open fullscreen — ${productName}`}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {allImages.length > 1 && (
+        <div className="ms-pdp__thumbs" aria-label="Product images">
+          {allImages.map((img, i) => (
+            <button
+              key={i}
+              type="button"
+              className="ms-pdp__thumb"
+              aria-label={`Show image ${i + 1} of ${allImages.length}`}
+              aria-current={i === selectedIndex ? "true" : undefined}
+              onClick={() => select(i)}
+            >
+              <Image
+                src={img.url}
+                alt=""
+                fill
+                sizes="96px"
+                loading="lazy"
+                className="ms-pdp__thumb-img"
+                aria-hidden="true"
+              />
+              <span className="ms-pdp__thumb-num" aria-hidden="true">
+                {i + 1}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isFullscreen && (
+        <div
+          className="ms-pdp__fs"
+          onClick={() => setIsFullscreen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Fullscreen image gallery"
+        >
+          <button
+            className="ms-pdp__fs-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsFullscreen(false);
+            }}
+            aria-label="Close fullscreen"
+          >
+            <svg
+              width="26"
+              height="26"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <button
+            className="ms-pdp__fs-btn ms-pdp__fs-btn--prev"
+            onClick={(e) => {
+              e.stopPropagation();
+              prevImage();
+            }}
+            aria-label="Previous image"
+          >
+            <svg
+              width="30"
+              height="30"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <button
+            className="ms-pdp__fs-btn ms-pdp__fs-btn--next"
+            onClick={(e) => {
+              e.stopPropagation();
+              nextImage();
+            }}
+            aria-label="Next image"
+          >
+            <svg
+              width="30"
+              height="30"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+          <div className="ms-pdp__fs-image">
+            <Image
+              src={currentImage.url}
+              alt={currentImage.alt ?? productName}
+              fill
+              priority
+              sizes="90vw"
+              className="object-contain"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

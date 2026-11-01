@@ -1,0 +1,373 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/db/prisma";
+import { getCurrentAuth } from "@/lib/auth/session";
+import {
+  cloudinaryConfigured,
+  deleteImage,
+  mediaFolder,
+  uploadBuffer,
+} from "@/lib/images/cloudinary";
+import {
+  BOUNDED_IMAGE_TYPES_MESSAGE,
+  isNonEmptyFile,
+  sniffBoundedImageType,
+} from "@/lib/images/validation";
+import {
+  MAX_REVIEW_IMAGES,
+  recalcProductRating,
+  verifiedProfileIds,
+} from "@/lib/reviews";
+import { invalidateReviews } from "@/lib/caching/cache";
+import { MAX_IMAGE_DIM, readImageDimensions } from "@/lib/images/read-dimensions";
+import {
+  actionRateLimited,
+  RATE_LIMIT_ACTION_MESSAGE,
+} from "@/lib/rate-limit/action";
+import {
+  MAX_IMAGE_BYTES,
+  MAX_REVIEW_TOTAL_IMAGE_BYTES,
+} from "@/lib/utils/limits";
+
+export type ReviewSubmitState = {
+  ok?: boolean;
+  redirectTo?: string;
+  error?: string;
+};
+
+/** One successful write a browsing reviewer is likely to make. */
+const RATE_LIMIT = { limit: 5, windowMs: 60 * 60 * 1000 };
+
+/** Server-only validation + persist for a customer product review (create or edit). */
+export async function submitReview(
+  _prev: ReviewSubmitState,
+  formData: FormData,
+): Promise<ReviewSubmitState> {
+  const { user, profile } = await getCurrentAuth();
+  if (!user || !profile) return { error: "Please sign in to write a review." };
+
+  // Per profile, not per IP — shared connections must not cap a reviewer.
+  if (await actionRateLimited("review", RATE_LIMIT, `profile:${profile.id}`)) {
+    return { error: RATE_LIMIT_ACTION_MESSAGE };
+  }
+
+  const slug = String(formData.get("slug") ?? "").trim();
+  // The caller states its intent explicitly. Never infer it from what happens
+  // to be stored, otherwise "new review" submissions get silently saved as
+  // updates and the two actions are indistinguishable server-side.
+  const mode = String(formData.get("mode") ?? "");
+  if (mode !== "create" && mode !== "edit") {
+    return { error: "Unsupported review action." };
+  }
+  const ratingRaw = Number(formData.get("rating"));
+  const rating =
+    Number.isInteger(ratingRaw) && ratingRaw >= 1 && ratingRaw <= 5
+      ? ratingRaw
+      : null;
+  const title = String(formData.get("title") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+  const removeIds = formData
+    .getAll("removeMedia")
+    .map(String)
+    .filter((s) => s.length > 0);
+  const general = slug.length === 0;
+
+  if (!rating) return { error: "Please choose a star rating between 1 and 5." };
+  if (title.length > 30)
+    return {
+      error: "Your title is limited to 30 characters — please shorten it.",
+    };
+  if (body.length < 10)
+    return {
+      error: "Please write at least a sentence or two (10+ characters).",
+    };
+  if (body.length > 2000)
+    return {
+      error: "Your review is too long — please keep it under 2,000 characters.",
+    };
+
+  const product = general
+    ? null
+    : await prisma.product.findFirst({
+        where: { slug, active: true },
+        select: { id: true, name: true, slug: true },
+      });
+  if (!general && !product)
+    return { error: "This product is no longer available to review." };
+
+  // Always scoped to the signed-in profile, so no crafted slug or form value
+  // can reach another customer's review.
+  const owned = product
+    ? await prisma.review.findUnique({
+        where: {
+          profileId_productId: { profileId: profile.id, productId: product.id },
+        },
+      })
+    : await prisma.review.findFirst({
+        where: { profileId: profile.id, type: "GENERAL" },
+        orderBy: { createdAt: "desc" },
+      });
+
+  // `target` is the review this submission may update; it stays null for a
+  // create so a new review can never overwrite an existing one.
+  let target: typeof owned = null;
+  if (mode === "edit") {
+    if (!owned)
+      return { error: "We couldn't find one of your reviews to edit." };
+    if (product && owned.type !== "PRODUCT")
+      return { error: "Unexpected review state — please contact support." };
+    target = owned;
+  } else if (owned) {
+    // Both limits are database rules — @@unique([profileId, productId]) for
+    // product reviews, and the Review_one_general_review_per_profile partial
+    // unique index for general ones. Report them instead of updating, so a
+    // create can never be coerced into an overwrite.
+    return {
+      error: product
+        ? "You have already reviewed this product. Edit your existing review instead."
+        : "You have already written a review. Edit your existing review instead.",
+    };
+  }
+
+  const existingMedia = target
+    ? await prisma.media.findMany({
+        where: { entityType: "REVIEW", entityId: target.id },
+      })
+    : [];
+  const kept = existingMedia.filter((m) => !removeIds.includes(m.id));
+  if (removeIds.some((id) => !existingMedia.some((m) => m.id === id))) {
+    return { error: "Requested photo removal could not be resolved." };
+  }
+
+  const rawImages = formData.getAll("images").filter(isNonEmptyFile);
+  if (rawImages.length + kept.length > MAX_REVIEW_IMAGES) {
+    return { error: `You can attach at most ${MAX_REVIEW_IMAGES} photos.` };
+  }
+  if (rawImages.length > 0 && !cloudinaryConfigured()) {
+    return {
+      error:
+        "Photo upload is temporarily unavailable — you can submit your review without photos.",
+    };
+  }
+  // Validate by file bytes, not browser-reported MIME — gallery/camera picks often
+  // report an empty or heic type under a generic "blob" name while being valid JPEG/PNG.
+  const images = await Promise.all(
+    rawImages.map(async (f) => ({
+      name: f.name,
+      buffer: Buffer.from(await f.arrayBuffer()),
+    })),
+  );
+  let totalBytes = 0;
+  for (const img of images) {
+    if (img.buffer.length > MAX_IMAGE_BYTES)
+      return {
+        error: `Each photo must be under 5 MB — "${img.name}" is too large.`,
+      };
+    totalBytes += img.buffer.length;
+    if (totalBytes > MAX_REVIEW_TOTAL_IMAGE_BYTES)
+      return {
+        error: "Total photo size must stay under 16 MB.",
+      };
+    if (!sniffBoundedImageType(img.buffer))
+      return {
+        error: `"${img.name}" isn't a valid image. ${BOUNDED_IMAGE_TYPES_MESSAGE}`,
+      };
+    const dims = readImageDimensions(img.buffer);
+    if (dims && (dims.width > MAX_IMAGE_DIM || dims.height > MAX_IMAGE_DIM)) {
+      return {
+        error: `"${img.name}" is too large (images must be under ${MAX_IMAGE_DIM}px on each side).`,
+      };
+    }
+  }
+
+  const verified = product
+    ? (await verifiedProfileIds(product.id, [profile.id])).has(profile.id)
+    : false;
+  const reviewId = target?.id ?? `review-${crypto.randomUUID()}`;
+
+  // Upload new photos once the row exists so they land in the review's own folder.
+  //
+  // No explicit preview guard is needed before the upload the way
+  // repair-request.ts has one: submitReview has already read the database on
+  // every path by now (getCurrentAuth, then prisma.product/review/media above),
+  // so in Preview the database guard throws before reaching Cloudinary. Keep the
+  // prisma reads above this upload — reordering them would reopen that gap.
+  const uploaded: {
+    url: string;
+    publicId: string;
+    width: number;
+    height: number;
+  }[] = [];
+  if (images.length > 0) {
+    const folder = mediaFolder("REVIEW", reviewId);
+    try {
+      for (const img of images) {
+        uploaded.push(await uploadBuffer(img.buffer, { folder }));
+      }
+    } catch (e) {
+      console.error("Review photo upload error:", e);
+      for (const u of uploaded) await deleteImage(u.publicId).catch(() => {});
+      return {
+        error:
+          "One or more photos failed to upload. Please retry, or submit without photos.",
+      };
+    }
+  }
+
+  const common = {
+    rating,
+    title: title || null,
+    body,
+    authorName: profile.name,
+  };
+
+  try {
+    if (target) {
+      await prisma.review.update({
+        where: { id: target.id },
+        data: { ...common, verified },
+      });
+      // Remove retired photos (Cloudinary best-effort — a failed delete must not block).
+      for (const m of existingMedia.filter(
+        (m) => !kept.some((k) => k.id === m.id),
+      )) {
+        await deleteImage(m.publicId).catch(() => {});
+      }
+      await prisma.media.deleteMany({
+        where: {
+          entityType: "REVIEW",
+          entityId: target.id,
+          id: { in: removeIds },
+        },
+      });
+      if (uploaded.length > 0) {
+        await prisma.media.createMany({
+          data: uploaded.map((u, i) => ({
+            publicId: u.publicId,
+            secureUrl: u.url,
+            entityType: "REVIEW" as const,
+            entityId: target.id,
+            folder: mediaFolder("REVIEW", target.id),
+            role: "CUSTOMER_UPLOAD" as const,
+            sortOrder: kept.length + i,
+            width: u.width,
+            height: u.height,
+          })),
+        });
+      }
+    } else if (product) {
+      await prisma.review.create({
+        data: {
+          id: reviewId,
+          profileId: profile.id,
+          productId: product.id,
+          type: "PRODUCT",
+          ...common,
+          verified,
+          productNameSnapshot: product.name,
+          productSlugSnapshot: product.slug,
+          status: "PENDING",
+        },
+      });
+      if (uploaded.length > 0) {
+        await prisma.media.createMany({
+          data: uploaded.map((u, i) => ({
+            publicId: u.publicId,
+            secureUrl: u.url,
+            entityType: "REVIEW" as const,
+            entityId: reviewId,
+            folder: mediaFolder("REVIEW", reviewId),
+            role: "CUSTOMER_UPLOAD" as const,
+            sortOrder: i,
+            width: u.width,
+            height: u.height,
+          })),
+        });
+      }
+    } else {
+      await prisma.review.create({
+        data: {
+          id: reviewId,
+          profileId: profile.id,
+          type: "GENERAL",
+          ...common,
+          status: "PENDING",
+        },
+      });
+      if (uploaded.length > 0) {
+        await prisma.media.createMany({
+          data: uploaded.map((u, i) => ({
+            publicId: u.publicId,
+            secureUrl: u.url,
+            entityType: "REVIEW" as const,
+            entityId: reviewId,
+            folder: mediaFolder("REVIEW", reviewId),
+            role: "CUSTOMER_UPLOAD" as const,
+            sortOrder: i,
+            width: u.width,
+            height: u.height,
+          })),
+        });
+      }
+    }
+  } catch (e) {
+    console.error("Review persist error:", e);
+    for (const u of uploaded) await deleteImage(u.publicId).catch(() => {});
+    return { error: "Your review could not be saved. Please try again." };
+  }
+
+  if (product) await recalcProductRating(product.id);
+  // A review edit can touch an APPROVED review (public feed + product rating),
+  // so flush the reviews slice (and the product-rating payload) on any submit.
+  invalidateReviews();
+  if (product) revalidatePath(`/product/${product.slug}`);
+  else revalidatePath("/");
+  revalidatePath("/admin/reviews");
+  return {
+    ok: true,
+    redirectTo: product
+      ? `/product/${product.slug}?rv=submitted`
+      : "/?rv=submitted",
+  };
+}
+
+/** A customer deletes their own review (kept private, not a hard-sell flow). */
+export async function deleteOwnReview(
+  formData: FormData,
+): Promise<ReviewSubmitState> {
+  const { user, profile } = await getCurrentAuth();
+  if (!user || !profile) return { error: "Please sign in." };
+
+  const id = String(formData.get("reviewId") ?? "");
+  const review = await prisma.review.findUnique({ where: { id } });
+  if (!review || review.profileId !== profile.id) {
+    return { error: "This review does not belong to your account." };
+  }
+
+  const media = await prisma.media.findMany({
+    where: { entityType: "REVIEW", entityId: id },
+    select: { publicId: true },
+  });
+  await prisma.review.delete({ where: { id } });
+  await prisma.media.deleteMany({
+    where: { entityType: "REVIEW", entityId: id },
+  });
+  for (const m of media) await deleteImage(m.publicId).catch(() => {});
+  if (review.productId) await recalcProductRating(review.productId);
+  invalidateReviews();
+
+  const slug = review.productSlugSnapshot;
+  if (slug) revalidatePath(`/product/${slug}`);
+  revalidatePath("/");
+  revalidatePath("/account");
+  revalidatePath("/account/orders");
+  revalidatePath("/admin/reviews");
+  return {
+    ok: true,
+    redirectTo:
+      review.type === "PRODUCT" && slug
+        ? `/product/${slug}?rv=deleted`
+        : "/?rv=deleted",
+  };
+}

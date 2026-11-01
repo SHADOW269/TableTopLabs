@@ -1,0 +1,1087 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { prisma } from "@/lib/db/prisma";
+import { requirePermission } from "@/lib/auth/admin";
+import { syncTrackingCache } from "@/lib/orders/tracking";
+import {
+  derivePaymentStatus,
+  settledAmount,
+} from "@/lib/payments/payment-status";
+import { netCollectedAmount } from "@/lib/payments/refund-accounting";
+import { shouldNotifyAfterManualPayment } from "@/lib/notifications/paid-confirmation";
+import { pickupSlotEndsAt } from "@/lib/shipping/pickup-slots";
+import {
+  bookPickup,
+  cancelShipment,
+  createShipment,
+  editShipment,
+  PICKUP_SETTING_KEY,
+  type CreateShipmentInput,
+  type PickupLocation,
+} from "@/lib/shipping/delhivery";
+import { resolvePickupLocation } from "@/lib/shipping/pickup-config";
+
+export type ActionState = { ok?: boolean; error?: string; message?: string };
+
+const rupees = (paise: number) => (paise / 100).toFixed(2).replace(/\.00$/, "");
+
+/** Legacy pickup row (SiteSetting["delhivery_pickup"]). Kept only as a
+ *  fallback for deployments that never set DELHIVERY_PICKUP_* — the
+ *  environment is the authoritative source. See @/lib/shipping/pickup-config. */
+async function readLegacyPickupSetting(): Promise<Partial<PickupLocation> | null> {
+  const setting = await prisma.siteSetting.findUnique({
+    where: { key: PICKUP_SETTING_KEY },
+  });
+  if (
+    setting?.value &&
+    typeof setting.value === "object" &&
+    !Array.isArray(setting.value)
+  ) {
+    return setting.value as Partial<PickupLocation>;
+  }
+  return null;
+}
+
+/** Env-first pickup location, legacy DB row as fallback. */
+async function resolvePickup() {
+  return resolvePickupLocation(await readLegacyPickupSetting());
+}
+
+const statusSchema = z.object({
+  orderId: z.string().min(1),
+  status: z.enum([
+    "ORDER_RECEIVED",
+    "ORDER_CONFIRMED",
+    "PAYMENT_PENDING",
+    "PAYMENT_RECEIVED",
+    "PARTS_BOOKED",
+    "PARTS_SHIPPED",
+    "PARTS_RECEIVED",
+    "IN_QUEUE",
+    "WORK_STARTED",
+    "TESTING",
+    "COMPLETED",
+    "PACKING",
+    "SHIPMENT_BOOKED",
+    "SHIPMENT_PICKED_UP",
+    "IN_TRANSIT",
+    "DELIVERED",
+    "TESTING_WARRANTY_ACTIVE",
+    "ORDER_COMPLETED",
+  ]),
+  note: z.string().max(2000).optional(),
+});
+
+export async function updateOrderStatus(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = statusSchema.safeParse({
+    orderId: formData.get("orderId"),
+    status: formData.get("status"),
+    note: formData.get("note") || undefined,
+  });
+  if (!parsed.success) return { error: "Invalid status." };
+  const { orderId, status, note } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { status: true, orderNumber: true },
+  });
+  if (!order) return { error: "Order not found." };
+
+  // Idempotent replay: an identical status with no new note is a no-op, so a
+  // double-click or retried request can't mint duplicate timeline entries.
+  if (order.status === status && !note) return { ok: true };
+
+  try {
+    await prisma.$transaction([
+      prisma.order.update({ where: { id: orderId }, data: { status } }),
+      prisma.orderTimeline.create({
+        data: { orderId, status, note: note ?? null },
+      }),
+    ]);
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("updateOrderStatus failed:", e);
+    return { error: "Couldn't save status change." };
+  }
+  revalidatePath("/admin/orders");
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true };
+}
+
+const timelineSchema = z.object({
+  orderId: z.string().min(1),
+  status: z.string().min(1).max(64),
+  note: z.string().max(2000),
+});
+
+export async function addTimelineEntry(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = timelineSchema.safeParse({
+    orderId: formData.get("orderId"),
+    status: formData.get("status"),
+    note: formData.get("note") || "",
+  });
+  if (!parsed.success) return { error: "Status and note are required." };
+  const { orderId, status, note } = parsed.data;
+
+  const enumVal = status as z.infer<typeof statusSchema>["status"];
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true },
+  });
+  if (!order) return { error: "Order not found." };
+
+  try {
+    await prisma.orderTimeline.create({
+      data: { orderId, status: enumVal, note: note || null },
+    });
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("addTimelineEntry failed:", e);
+    return { error: "Couldn't add timeline entry." };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true };
+}
+
+const shippingSchema = z.object({
+  orderId: z.string().min(1),
+  courier: z.string().max(120).optional(),
+  trackingNumber: z.string().max(120).optional(),
+  trackingUrl: z.string().url().max(500).optional().or(z.literal("")),
+  status: z
+    .enum([
+      "NOT_DISPATCHED",
+      "DISPATCHED",
+      "IN_TRANSIT",
+      "OUT_FOR_DELIVERY",
+      "DELIVERED",
+      "RETURNED",
+    ])
+    .optional(),
+});
+
+export async function updateShipping(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = shippingSchema.safeParse({
+    orderId: formData.get("orderId"),
+    courier: formData.get("courier") || undefined,
+    trackingNumber: formData.get("trackingNumber") || undefined,
+    trackingUrl: formData.get("trackingUrl") || undefined,
+    status: formData.get("status") || undefined,
+  });
+  if (!parsed.success) return { error: "Invalid shipping details." };
+  const { orderId, ...data } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true },
+  });
+  if (!order) return { error: "Order not found." };
+
+  try {
+    await prisma.shipment.upsert({
+      where: { orderId },
+      update: data,
+      create: { orderId, ...data },
+    });
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("updateShipping failed:", e);
+    return { error: "Couldn't save shipping details." };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true };
+}
+
+const notesSchema = z.object({
+  orderId: z.string().min(1),
+  message: z.string().max(4000),
+  visibleToCustomer: z.string().optional(), // "1" when customer-visible
+});
+
+export async function addOrderNote(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = notesSchema.safeParse({
+    orderId: formData.get("orderId"),
+    message: formData.get("message") || "",
+    visibleToCustomer: formData.get("visibleToCustomer") || undefined,
+  });
+  if (!parsed.success || !parsed.data.message.trim())
+    return { error: "Note cannot be empty." };
+  const { orderId, message, visibleToCustomer } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true },
+  });
+  if (!order) return { error: "Order not found." };
+
+  try {
+    await prisma.orderMessage.create({
+      data: {
+        orderId,
+        author: "ADMIN",
+        message,
+        visibleToCustomer: visibleToCustomer === "1",
+      },
+    });
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("addOrderNote failed:", e);
+    return { error: "Couldn't save note." };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true };
+}
+
+const amountsSchema = z.object({
+  orderId: z.string().min(1),
+  subtotal: z.coerce.number().int().min(0),
+  shipping: z.coerce.number().int().min(0),
+  discount: z.coerce.number().int().min(0),
+  total: z.coerce.number().int().min(0),
+});
+
+// Deriving the order's payment status now lives in @/lib/payments/payment-status
+// so the webhook, /verify and these admin actions cannot drift apart — they
+// previously each rolled their own and disagreed about refunded orders.
+
+export async function updateOrderAmounts(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = amountsSchema.safeParse({
+    orderId: formData.get("orderId"),
+    subtotal: formData.get("subtotal"),
+    shipping: formData.get("shipping"),
+    discount: formData.get("discount"),
+    total: formData.get("total"),
+  });
+  if (!parsed.success) return { error: "Invalid amounts." };
+  const { orderId, subtotal, shipping, discount, total } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      orderNumber: true,
+      paymentStatus: true,
+      // REFUNDED rows included: a refunded payment is money that WAS collected,
+      // and leaving it out made this sum 0 for a refunded order — which then
+      // reset paymentStatus to PENDING and re-opened the order for collection.
+      payments: {
+        // REFUNDED rows count as collected money (the money WAS collected, then
+        // returned). refundedAmount comes along so the balance below can be net
+        // rather than gross.
+        where: { status: { in: ["PAID", "REFUNDED"] } },
+        select: { amount: true, status: true, refundedAmount: true },
+      },
+    },
+  });
+  if (!order) return { error: "Order not found." };
+
+  // `current` is passed through so a REFUNDED order stays REFUNDED: editing the
+  // total is a pricing correction, not a reason to forget the money came back.
+  //
+  // Deliberately NO paid-confirmation here. Editing the total can recompute
+  // `paymentStatus` to PAID, but a price correction records no payment, so it
+  // must never send (or re-send) a "we received your payment" email. Only
+  // recordManualPayment and the online settlement paths notify.
+  const paymentStatus = derivePaymentStatus(
+    settledAmount(order.payments),
+    total,
+    order.paymentStatus,
+  );
+
+  try {
+    await prisma.$transaction([
+      prisma.order.update({
+        where: { id: orderId },
+        data: { subtotal, shipping, discount, total, paymentStatus },
+      }),
+      prisma.orderTimeline.create({
+        data: {
+          orderId,
+          status: "PAYMENT_PENDING",
+          note: `Amounts updated by admin (subtotal ₹${rupees(subtotal)}, shipping ₹${rupees(shipping)}, discount ₹${rupees(discount)}, total ₹${rupees(total)}).`,
+        },
+      }),
+    ]);
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("updateOrderAmounts failed:", e);
+    return { error: "Couldn't save amounts." };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true };
+}
+
+const addressSchema = z.object({
+  orderId: z.string().min(1),
+  label: z.string().max(80).optional().or(z.literal("")),
+  streetAddress: z.string().min(1).max(300),
+  apartment: z.string().max(120).optional().or(z.literal("")),
+  city: z.string().min(1).max(120),
+  state: z.string().min(1).max(120),
+  postalCode: z.string().min(1).max(20),
+  country: z.string().min(1).max(80),
+  phone: z.string().max(30).optional().or(z.literal("")),
+});
+
+export async function updateOrderAddress(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = addressSchema.safeParse({
+    orderId: formData.get("orderId"),
+    label: formData.get("label") || undefined,
+    streetAddress: formData.get("streetAddress"),
+    apartment: formData.get("apartment") || undefined,
+    city: formData.get("city"),
+    state: formData.get("state"),
+    postalCode: formData.get("postalCode"),
+    country: formData.get("country"),
+    phone: formData.get("phone") || undefined,
+  });
+  if (!parsed.success) return { error: "Invalid address details." };
+  const {
+    orderId,
+    label,
+    streetAddress,
+    apartment,
+    city,
+    state,
+    postalCode,
+    country,
+    phone,
+  } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true },
+  });
+  if (!order) return { error: "Order not found." };
+
+  try {
+    await prisma.orderAddress.upsert({
+      where: { orderId },
+      update: {
+        label: label || null,
+        streetAddress,
+        apartment: apartment || null,
+        city,
+        state,
+        postalCode,
+        country,
+        phone: phone || null,
+      },
+      create: {
+        orderId,
+        label: label || null,
+        streetAddress,
+        apartment: apartment || null,
+        city,
+        state,
+        postalCode,
+        country,
+        phone: phone || null,
+      },
+    });
+  } catch (e) {
+    console.error("updateOrderAddress failed:", e);
+    return { error: "Couldn't save address." };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true };
+}
+
+const createShipmentSchema = z.object({
+  orderId: z.string().min(1),
+  weightGrams: z.coerce.number().int().min(1).optional(),
+  widthCm: z.coerce.number().int().min(1).optional(),
+  heightCm: z.coerce.number().int().min(1).optional(),
+  lengthCm: z.coerce.number().int().min(1).optional(),
+  declaredValue: z.coerce.number().int().min(1).optional(),
+});
+
+/**
+ * One-click Delhivery manifest: builds the cmu payload from the order's
+ * saved address + totals, calls Delhivery, then stores the returned waybill
+ * as the shipment tracking number and marks it dispatched.
+ */
+export async function createShipmentDelivery(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = createShipmentSchema.safeParse({
+    orderId: formData.get("orderId"),
+    weightGrams: formData.get("weightGrams") || undefined,
+    widthCm: formData.get("widthCm") || undefined,
+    heightCm: formData.get("heightCm") || undefined,
+    lengthCm: formData.get("lengthCm") || undefined,
+    declaredValue: formData.get("declaredValue") || undefined,
+  });
+  if (!parsed.success)
+    return { error: "Check the shipment fields (dimensions must be ≥ 1 cm)." };
+  const {
+    orderId,
+    weightGrams: enteredWeight,
+    widthCm,
+    heightCm,
+    lengthCm,
+    declaredValue,
+  } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      shippingAddress: true,
+      items: { select: { name: true, quantity: true } },
+      services: { select: { name: true, quantity: true } },
+      repairs: {
+        select: {
+          deviceType: true,
+          deviceModel: true,
+          issue: true,
+          quotePrice: true,
+        },
+      },
+      shipment: { select: { trackingNumber: true } },
+    },
+  });
+  if (!order) return { error: "Order not found." };
+  if (order.shipment?.trackingNumber) {
+    return {
+      error: `This order is already dispatched (waybill ${order.shipment.trackingNumber}).`,
+    };
+  }
+  const addr = order.shippingAddress;
+  if (!addr) return { error: "Add a shipping address to this order first." };
+
+  const weightGrams = enteredWeight ?? order.shippingWeightGrams;
+  if (!weightGrams || weightGrams < 1)
+    return { error: "A shipment weight (grams) is required." };
+
+  // Pickup location from DELHIVERY_PICKUP_* env vars (authoritative), falling
+  // back to the legacy SiteSetting row. Return fields default to the same
+  // warehouse so RTO packages have an address.
+  const pickup = await resolvePickup();
+
+  // Content description: real item/service names first, then repair rows and
+  // work types, so repair orders don't manifest as the generic fallback.
+  const summary =
+    order.summary && typeof order.summary === "object"
+      ? (order.summary as Record<string, unknown>)
+      : {};
+  const workTypes = Array.isArray(summary.workTypes)
+    ? (summary.workTypes as unknown[]).filter(
+        (w): w is string => typeof w === "string",
+      )
+    : [];
+  const productsDesc =
+    [
+      order.items
+        .map((i) => i.name)
+        .concat(order.services.map((s) => s.name))
+        .join(", "),
+      order.repairs
+        .map(
+          (r) =>
+            `${r.deviceType} ${r.deviceModel}${r.issue ? ` — ${r.issue}` : ""}`,
+        )
+        .join(", "),
+      workTypes.join(", "),
+    ]
+      .filter(Boolean)
+      .join(" | ") || "TableTopLabs package";
+
+  // Declared value for the manifest: admin override wins, otherwise the
+  // largest of the order total / repair quote / customer budget — never ₹0.
+  const budgetPaise =
+    Number.isFinite(Number(summary.budget)) && Number(summary.budget) > 0
+      ? Math.round(Number(summary.budget) * 100)
+      : 0;
+  const repairQuotePaise = order.repairs.reduce(
+    (s, r) => s + (r.quotePrice ?? 0),
+    0,
+  );
+  const declaredPaise = declaredValue
+    ? declaredValue * 100
+    : Math.max(order.total, repairQuotePaise, budgetPaise);
+
+  const quantity = Math.max(
+    1,
+    order.items.reduce((s, i) => s + i.quantity, 0) ||
+      order.services.reduce((s, i) => s + i.quantity, 0),
+  );
+  const shippingMode =
+    order.shippingMode && /express/i.test(order.shippingMode)
+      ? "Express"
+      : "Surface";
+
+  const input: CreateShipmentInput = {
+    consignee: {
+      name: order.customerName,
+      address: [addr.streetAddress, addr.apartment].filter(Boolean).join(", "),
+      pin: addr.postalCode,
+      city: addr.city,
+      state: addr.state,
+      country: addr.country,
+      phone: addr.phone ?? order.customerPhone ?? "",
+    },
+    order: order.orderNumber,
+    sellerInv: order.orderNumber,
+    totalRupees: String(declaredPaise / 100),
+    paymentMode: "Prepaid",
+    codAmountRupees: undefined,
+    productsDesc,
+    quantity,
+    weightGrams,
+    shipmentLengthCm: lengthCm ?? 20,
+    shipmentWidthCm: widthCm ?? 20,
+    shipmentHeightCm: heightCm ?? 20,
+    shippingMode,
+    pickup,
+  };
+
+  const result = await createShipment(input);
+  if (!result.ok) return { error: result.message };
+
+  try {
+    await prisma.$transaction([
+      prisma.shipment.upsert({
+        where: { orderId },
+        update: {
+          courier: "Delhivery",
+          trackingNumber: result.waybill,
+          status: "DISPATCHED",
+          shippedAt: new Date(),
+        },
+        create: {
+          orderId,
+          courier: "Delhivery",
+          trackingNumber: result.waybill,
+          status: "DISPATCHED",
+          shippedAt: new Date(),
+        },
+      }),
+      prisma.orderTimeline.create({
+        data: {
+          orderId,
+          status: "SHIPMENT_BOOKED",
+          note: `Shipment manifested with Delhivery (waybill ${result.waybill}).`,
+        },
+      }),
+    ]);
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("createShipmentDelivery (save) failed:", e);
+    return {
+      error:
+        "Shipment created in Delhivery but couldn't be saved locally. Waybill: " +
+        result.waybill,
+    };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true, message: result.waybill };
+}
+
+const updateShipmentSchema = z.object({
+  orderId: z.string().min(1),
+  weightGrams: z.coerce.number().min(0.1),
+  paymentType: z.enum(["Pre-paid", "COD"]).default("Pre-paid"),
+  codAmount: z.coerce.number().min(0).optional(),
+  lengthCm: z.coerce.number().min(1).optional(),
+  widthCm: z.coerce.number().min(1).optional(),
+  heightCm: z.coerce.number().min(1).optional(),
+});
+
+/**
+ * Adjusts an already-manifested Delhivery shipment (weight / dimensions / COD)
+ * via /api/p/edit, then records a timeline entry.
+ */
+export async function updateShipmentDelivery(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = updateShipmentSchema.safeParse({
+    orderId: formData.get("orderId"),
+    weightGrams: formData.get("weightGrams"),
+    paymentType: formData.get("paymentType") || undefined,
+    codAmount: formData.get("codAmount") || undefined,
+    lengthCm: formData.get("lengthCm") || undefined,
+    widthCm: formData.get("widthCm") || undefined,
+    heightCm: formData.get("heightCm") || undefined,
+  });
+  if (!parsed.success)
+    return { error: "Check the fields — weight (grams) is required." };
+  const {
+    orderId,
+    weightGrams,
+    paymentType,
+    codAmount,
+    lengthCm,
+    widthCm,
+    heightCm,
+  } = parsed.data;
+  if (paymentType === "COD" && codAmount == null)
+    return { error: "Enter the COD amount for a COD shipment." };
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      orderNumber: true,
+      shipment: { select: { trackingNumber: true } },
+    },
+  });
+  if (!order) return { error: "Order not found." };
+  const waybill = order.shipment?.trackingNumber;
+  if (!waybill)
+    return { error: "No Delhivery shipment exists for this order yet." };
+
+  const result = await editShipment({
+    waybill,
+    pt: paymentType,
+    cod: paymentType === "COD" ? codAmount : undefined,
+    gm: weightGrams,
+    shipmentLengthCm: lengthCm,
+    shipmentWidthCm: widthCm,
+    shipmentHeightCm: heightCm,
+  });
+  if (!result.ok) return { error: result.message };
+
+  try {
+    await prisma.orderTimeline.create({
+      data: {
+        orderId,
+        status: "SHIPMENT_BOOKED",
+        note:
+          paymentType === "COD"
+            ? `Shipment ${waybill} updated with Delhivery (weight ${weightGrams} gm, COD ₹${rupees(codAmount! * 100)}).`
+            : `Shipment ${waybill} updated with Delhivery (weight ${weightGrams} gm).`,
+      },
+    });
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("updateShipmentDelivery (timeline) failed:", e);
+    return {
+      error:
+        "Shipment updated in Delhivery but the timeline note couldn't be saved (waybill " +
+        waybill +
+        ").",
+    };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true, message: `Shipment ${waybill} updated` };
+}
+
+const cancelShipmentSchema = z.object({
+  orderId: z.string().min(1),
+  confirm: z.string().min(1),
+});
+
+/**
+ * Cancels a manifested Delhivery shipment via /api/p/edit, then clears the
+ * local tracking number so the order can be re-manifested.
+ */
+export async function cancelShipmentDelivery(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = cancelShipmentSchema.safeParse({
+    orderId: formData.get("orderId"),
+    confirm: formData.get("confirm"),
+  });
+  if (!parsed.success || !/^yes$/i.test(parsed.data.confirm.trim()))
+    return { error: "Type YES to confirm cancellation." };
+  const { orderId } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      orderNumber: true,
+      shipment: { select: { trackingNumber: true } },
+    },
+  });
+  if (!order) return { error: "Order not found." };
+  const waybill = order.shipment?.trackingNumber;
+  if (!waybill) return { error: "No Delhivery shipment to cancel." };
+
+  const result = await cancelShipment(waybill);
+  if (!result.ok) return { error: result.message };
+
+  try {
+    await prisma.$transaction([
+      prisma.shipment.update({
+        where: { orderId },
+        data: {
+          trackingNumber: null,
+          status: "NOT_DISPATCHED",
+          shippedAt: null,
+        },
+      }),
+      prisma.orderTimeline.create({
+        data: {
+          orderId,
+          status: "SHIPMENT_BOOKED",
+          note: `Shipment ${waybill} cancelled with Delhivery. This order can be manifested again.`,
+        },
+      }),
+    ]);
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("cancelShipmentDelivery (save) failed:", e);
+    return {
+      error:
+        "Shipment cancelled in Delhivery but couldn't update the order locally (waybill " +
+        waybill +
+        ").",
+    };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return { ok: true, message: `Shipment ${waybill} cancelled` };
+}
+
+const bookPickupSchema = z.object({
+  orderId: z.string().min(1),
+  pickupDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  pickupTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
+  packageCount: z.coerce.number().int().min(1).max(100),
+});
+
+/**
+ * Books a Delhivery courier pickup at the configured warehouse
+ * (/fm/request/new/) and records a timeline entry.
+ */
+export async function bookPickupDelivery(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = bookPickupSchema.safeParse({
+    orderId: formData.get("orderId"),
+    pickupDate: formData.get("pickupDate"),
+    pickupTime: formData.get("pickupTime"),
+    packageCount: formData.get("packageCount"),
+  });
+  if (!parsed.success)
+    return { error: "Enter a pickup date, time, and package count." };
+  const { orderId, pickupDate, pickupTime, packageCount } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true },
+  });
+  if (!order) return { error: "Order not found." };
+
+  const pickup = await resolvePickup();
+  if (!pickup.name)
+    return {
+      error:
+        "Set DELHIVERY_PICKUP_NAME (and DELHIVERY_PICKUP_PIN) in the server environment first.",
+    };
+  const time = pickupTime.length === 5 ? `${pickupTime}:00` : pickupTime;
+
+  // Delhivery rejects pickups outside a slot, and a slot stays open until its
+  // END time — a 18:00–21:00 slot picked at 19:00 is valid. Check the end, not
+  // the start, so the admin isn't blocked from an in-progress slot. IST is
+  // fixed +05:30 (no DST), so the slot end converts to a UTC instant directly.
+  const pickupAt = pickupSlotEndsAt(pickupDate, time);
+  if (!Number.isFinite(pickupAt) || pickupAt <= Date.now()) {
+    return { error: "Pickup must be at a future time (IST)." };
+  }
+
+  const result = await bookPickup({
+    pickupLocation: pickup.name,
+    pickupDate,
+    pickupTime: time,
+    expectedPackageCount: packageCount,
+  });
+  if (!result.ok) return { error: result.message };
+
+  try {
+    await prisma.$transaction([
+      prisma.shipment.updateMany({
+        where: { orderId },
+        data: { pickupId: result.pickupId },
+      }),
+      prisma.orderTimeline.create({
+        data: {
+          orderId,
+          status: "SHIPMENT_BOOKED",
+          note: `Pickup booked with Delhivery for ${pickupDate} ${time} from ${pickup.name}${result.pickupId ? ` (pickup ID ${result.pickupId})` : ""} (${packageCount} package${packageCount === 1 ? "" : "s"}).`,
+        },
+      }),
+    ]);
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("bookPickupDelivery (timeline) failed:", e);
+    return {
+      error:
+        "Pickup booked with Delhivery but the timeline note couldn't be saved.",
+    };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+  return {
+    ok: true,
+    message: `Pickup booked for ${pickupDate} ${time}`,
+  };
+}
+
+const warehousePickupSchema = z.object({
+  pickupDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  pickupTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
+  shipmentIds: z.string().min(1),
+});
+
+/**
+ * Books a warehouse pickup from the /admin/shipments page, stamps each
+ * selected shipment with the Delhivery pickupId, and records a timeline note
+ * on every affected order — so the pickup is linked to the shipments it covers.
+ */
+export async function bookWarehousePickup(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = warehousePickupSchema.safeParse({
+    pickupDate: formData.get("pickupDate"),
+    pickupTime: formData.get("pickupTime"),
+    shipmentIds: formData.get("shipmentIds"),
+  });
+  if (!parsed.success)
+    return { error: "Enter a pickup date, time, and select shipments." };
+  const { pickupDate, pickupTime } = parsed.data;
+  const ids = parsed.data.shipmentIds.split(",").filter(Boolean);
+  if (ids.length === 0)
+    return { error: "Select at least one shipment for the pickup." };
+  const packageCount = ids.length;
+
+  const shipments = await prisma.shipment.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      orderId: true,
+      trackingNumber: true,
+      order: { select: { orderNumber: true } },
+    },
+  });
+  if (shipments.length !== ids.length)
+    return {
+      error: "Some selected shipments are missing. Reload the page and try again.",
+    };
+
+  const pickup = await resolvePickup();
+  if (!pickup.name)
+    return {
+      error:
+        "Set DELHIVERY_PICKUP_NAME (and DELHIVERY_PICKUP_PIN) in the server environment first.",
+    };
+  const time = pickupTime.length === 5 ? `${pickupTime}:00` : pickupTime;
+
+  const pickupAt = pickupSlotEndsAt(pickupDate, time);
+  if (!Number.isFinite(pickupAt) || pickupAt <= Date.now()) {
+    return { error: "Pickup must be at a future time (IST)." };
+  }
+
+  const result = await bookPickup({
+    pickupLocation: pickup.name,
+    pickupDate,
+    pickupTime: time,
+    expectedPackageCount: packageCount,
+  });
+  if (!result.ok) return { error: result.message };
+
+  try {
+    await prisma.$transaction([
+      prisma.shipment.updateMany({
+        where: { id: { in: ids } },
+        data: { pickupId: result.pickupId },
+      }),
+      prisma.orderTimeline.createMany({
+        data: shipments.map((s) => ({
+          orderId: s.orderId,
+          status: "SHIPMENT_BOOKED",
+          note: `Warehouse pickup booked with Delhivery for ${pickupDate} ${time} from ${pickup.name}${result.pickupId ? ` (pickup ID ${result.pickupId})` : ""}. ${packageCount} package${packageCount === 1 ? "" : "s"} in this pickup.`,
+        })),
+      }),
+    ]);
+  } catch (e) {
+    console.error("bookWarehousePickup (timeline) failed:", e);
+    return {
+      error:
+        "Pickup booked with Delhivery but the shipment pickup link couldn't be saved.",
+    };
+  }
+  revalidatePath("/admin/shipments");
+  for (const s of shipments) revalidatePath(`/admin/orders/${s.order.orderNumber}`);
+  return {
+    ok: true,
+    message: `Pickup booked for ${pickupDate} ${time} from ${pickup.name} — ${packageCount} shipment${packageCount === 1 ? "" : "s"} linked.`,
+  };
+}
+const manualPaymentSchema = z.object({
+  orderId: z.string().min(1),
+  amount: z.coerce.number().int().min(1),
+  method: z.string().max(80).optional(),
+  markPaid: z.string().optional(),
+});
+
+export async function recordManualPayment(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "update");
+  const parsed = manualPaymentSchema.safeParse({
+    orderId: formData.get("orderId"),
+    amount: formData.get("amount"),
+    method: formData.get("method") || undefined,
+    markPaid: formData.get("markPaid") || undefined,
+  });
+  if (!parsed.success) return { error: "Valid payment amount required." };
+  const { orderId, amount, method, markPaid } = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      orderNumber: true,
+      total: true,
+      paymentStatus: true,
+      // See updateOrderAmounts: REFUNDED rows count as collected money.
+      payments: {
+        // REFUNDED rows count as collected money (the money WAS collected, then
+        // returned). refundedAmount comes along so the balance below can be net
+        // rather than gross.
+        where: { status: { in: ["PAID", "REFUNDED"] } },
+        select: { amount: true, status: true, refundedAmount: true },
+      },
+    },
+  });
+  if (!order) return { error: "Order not found." };
+
+  const forcePaid = markPaid === "1";
+  const total = forcePaid ? amount : order.total;
+  // Net of refunds. Gross would let an admin record a manual payment on top of
+  // money already returned to the customer, because the refund would be invisible
+  // to the amount covered so far.
+  const covered = netCollectedAmount(order.payments);
+  const payAmount = forcePaid
+    ? amount
+    : Math.min(amount, Math.max(0, order.total - covered));
+  if (payAmount <= 0)
+    return { error: "Nothing left to pay — amount already covered." };
+
+  const paidAfter = forcePaid ? amount : covered + payAmount;
+  const paymentStatus = derivePaymentStatus(paidAfter, total, order.paymentStatus);
+
+  try {
+    await prisma.$transaction([
+      prisma.payment.create({
+        data: {
+          orderId,
+          amount: payAmount,
+          status: "PAID",
+          method: method || "manual",
+          paidAt: new Date(),
+        },
+      }),
+      prisma.order.update({ where: { id: orderId }, data: { paymentStatus } }),
+      prisma.orderTimeline.create({
+        data: {
+          orderId,
+          status: "PAYMENT_RECEIVED",
+          note: `Manual payment of ${payAmount} paise recorded by admin${method ? ` (${method})` : ""}.`,
+        },
+      }),
+    ]);
+    await syncTrackingCache(orderId);
+  } catch (e) {
+    console.error("recordManualPayment failed:", e);
+    return { error: "Couldn't record payment." };
+  }
+  revalidatePath(`/admin/orders/${order.orderNumber}`);
+
+  // Best-effort, AFTER the settlement tx committed: an admin-recorded payment
+  // that fully settles the order gets the same confirmation as an online one.
+  // Partial payments never notify (the shared gate returns false).
+  //
+  // The adapter is imported lazily so this module (and the action tests that
+  // stub its dependencies) never has to resolve the `server-only` email module
+  // unless a manual payment actually needs to notify.
+  if (shouldNotifyAfterManualPayment({ recordedAmount: payAmount, paymentStatus })) {
+    const { notifyPaidOrder } = await import(
+      "@/lib/notifications/send-paid-confirmation"
+    );
+    await notifyPaidOrder(orderId);
+  }
+  return { ok: true };
+}
+
+export async function deleteOrder(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermission("order", "delete");
+  const orderId = formData.get("orderId");
+  if (typeof orderId !== "string" || !orderId)
+    return { error: "Invalid order." };
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true, _count: { select: { refunds: true } } },
+  });
+  if (!order) return { error: "Order not found." };
+
+  // F3 — never destroy refund evidence. `Refund.orderId` is ON DELETE CASCADE, so
+  // deleting an order silently and permanently deletes every `rfnd_…` row for it.
+  // Razorpay keeps the authoritative record, so the local loss is recoverable only
+  // by re-deriving each refund from their API — and the per-refund amount, phase
+  // and Razorpay payment id held only on those rows are not all reproducible from
+  // a payment aggregate. This is a financial audit trail, so the delete is refused
+  // rather than repaired.
+  //
+  // Order rows that have never been refunded are unaffected, so the common case
+  // (tidying up a duplicate or test order) still works exactly as before.
+  if (order._count.refunds > 0) {
+    return {
+      error:
+        `This order has ${order._count.refunds} refund record${
+          order._count.refunds === 1 ? "" : "s"
+        } and cannot be deleted — the refund history would be destroyed. ` +
+        "Archive it instead.",
+    };
+  }
+
+  try {
+    // Children (items, services, repairs, payments, shipment, timeline,
+    // messages, warranty, tracking, couponUsage) cascade on delete. Refunds
+    // cascade too, which is why the guard above runs first.
+    await prisma.order.delete({ where: { id: orderId } });
+  } catch (e) {
+    console.error("deleteOrder failed:", e);
+    return { error: "Couldn't delete order." };
+  }
+  revalidatePath("/admin/orders");
+  redirect("/admin/orders");
+}

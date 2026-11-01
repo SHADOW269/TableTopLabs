@@ -1,0 +1,677 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/db/prisma";
+import { getCurrentAuth } from "@/lib/auth/session";
+import { availableQuantity, getCartWithItems } from "@/lib/cart";
+import { configSnapshot, resolveConfiguredPrice } from "@/lib/catalog/product-options";
+import {
+  calculateShipping,
+  chargeableWeightGrams,
+  DEFAULT_SHIPPING_MODE,
+  enabledShippingModes,
+  isFreeShipping,
+  quoteFingerprint,
+  toShippingMode,
+} from "@/lib/shipping/delhivery";
+import {
+  validateCoupon,
+  couponOrderCreateData,
+  incrementCouponUsage,
+  type CouponEligible,
+} from "@/lib/checkout/coupons";
+import { ensureRazorpayCustomer } from "@/lib/payments/razorpay-customer";
+import {
+  EXCHANGE_EXPIRY_KEY,
+  EXCHANGE_HASH_KEY,
+  EXCHANGE_STATE_KEY,
+  EXCHANGE_STATE_REDEEMABLE,
+  PAY_COOKIE,
+  createExchangeCode,
+  createOrderCapability,
+  verifyOrderPayCookie,
+} from "@/lib/payments/order-capability";
+import { payCookieOptions, readPayCookie } from "@/lib/payments/order-access";
+import { patchBillingDetails } from "@/lib/payments/billing-details";
+import {
+  checkRateLimit,
+  clientIp,
+  rateLimitResponse,
+} from "@/lib/payments/rate-limit";
+import { readJsonBody } from "@/lib/http/read-json-body";
+import {
+  PREVIEW_OPERATION_DISABLED_MESSAGE,
+  previewOperationsAllowed,
+} from "@/lib/config/deployment";
+import { MAX_ADDRESS_BOOK, MAX_ADDRESS_LINE, ORDER_JSON_LIMIT } from "@/lib/utils/limits";
+import { Prisma } from "@prisma/client";
+import Razorpay from "razorpay";
+
+export const dynamic = "force-dynamic";
+
+/** Per client, per minute. See the POST handler for why. */
+const RATE_LIMIT = { limit: 15, windowMs: 60_000 };
+
+/**
+ * Final product-order creation. The browser supplies ONLY the delivery
+ * address (+ optional save flag) — prices, quantities, subtotal, weight and
+ * shipping are all derived from the SERVER-SIDE cart and live catalog data.
+ */
+
+const addressSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required.").max(80),
+  lastName: z.string().trim().min(1, "Last name is required.").max(80),
+  streetAddress: z
+    .string()
+    .trim()
+    .min(1, "Address is required.")
+    .max(MAX_ADDRESS_LINE),
+  apartment: z.string().trim().max(MAX_ADDRESS_LINE).optional(),
+  city: z.string().trim().min(1, "City is required.").max(100),
+  state: z.string().trim().min(1, "State is required.").max(100),
+  postalCode: z
+    .string()
+    .trim()
+    .regex(/^[1-9]\d{5}$/, "Enter a valid 6-digit PIN code."),
+  phone: z
+    .string()
+    .trim()
+    .min(10, "Enter a valid phone number.")
+    .max(15)
+    .regex(/^\+?[0-9\s-]{10,15}$/, "Enter a valid phone number."),
+});
+
+const billingSchema = z.object({
+  fullName: z.string().trim().min(1, "Full name is required.").max(160),
+  addressLine1: z
+    .string()
+    .trim()
+    .min(1, "Address is required.")
+    .max(MAX_ADDRESS_LINE),
+  addressLine2: z.string().trim().max(MAX_ADDRESS_LINE).optional(),
+  city: z.string().trim().min(1, "City is required.").max(100),
+  state: z.string().trim().min(1, "State is required.").max(100),
+  pinCode: z
+    .string()
+    .trim()
+    .regex(/^[1-9]\d{5}$/, "Enter a valid 6-digit PIN code."),
+  phone: z.string().trim().min(10, "Enter a valid phone number.").max(15),
+});
+
+const bodySchema = z.object({
+  shippingAddress: addressSchema,
+  email: z.string().trim().toLowerCase().email("Enter a valid email address.").optional(),
+  saveAddress: z.boolean().optional(),
+  mode: z.string().optional(),
+  couponCode: z.string().trim().max(40).optional(),
+  billingSameAsShipping: z.boolean().optional(),
+  billingAddress: billingSchema.optional(),
+  checkoutId: z.string().trim().min(8).max(120).optional(),
+});
+
+/** Shipping-mode error taxonomy mapped to HTTP status. */
+function shipErrorStatus(errorCode: string): number {
+  if (
+    errorCode === "PINCODE_UNAVAILABLE" ||
+    errorCode === "MISSING_SHIPPING_CONFIGURATION"
+  )
+    return 422;
+  if (errorCode === "RATE_LIMITED") return 429;
+  return 502;
+}
+
+function getRazorpay() {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error("Razorpay credentials not configured");
+  }
+  return new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
+}
+
+export async function POST(req: NextRequest) {
+  // Defense in depth: a Preview deployment must not mint a Razorpay order or
+  // write an Order row against a shared/production database. Refused before the
+  // rate limiter, validation, or any DB access.
+  if (!previewOperationsAllowed()) {
+    return NextResponse.json(
+      { error: PREVIEW_OPERATION_DISABLED_MESSAGE },
+      { status: 503 },
+    );
+  }
+  try {
+    // First thing in the handler: this endpoint mints a Razorpay order (a real
+    // paid API call) and writes an Order row, so an unbounded loop here is both a
+    // bill and a spam channel. Keyed per client, at 15/min — far above what
+    // someone assembling a cart and retrying a validation error will hit.
+    const limit = checkRateLimit(
+      `create-order:ip:${clientIp(req)}`,
+      RATE_LIMIT,
+    );
+    if (!limit.allowed) return rateLimitResponse(limit, "create-order");
+
+    // Guests may order — the address travels with the order, not the account.
+    const { user, profile } = await getCurrentAuth();
+
+    const bodyRead = await readJsonBody(req, ORDER_JSON_LIMIT);
+    if (!bodyRead.ok) {
+      return NextResponse.json(
+        { error: "Invalid delivery details." },
+        { status: bodyRead.status },
+      );
+    }
+    const parsed = bodySchema.safeParse(bodyRead.data ?? {});
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: parsed.error.issues[0]?.message ?? "Invalid delivery details.",
+        },
+        { status: 400 },
+      );
+    }
+    const { shippingAddress: addr, saveAddress } = parsed.data;
+    const billingAddr = parsed.data.billingAddress;
+    const requestedModeRaw =
+      parsed.data.mode == null
+        ? DEFAULT_SHIPPING_MODE
+        : toShippingMode(parsed.data.mode);
+    if (
+      !requestedModeRaw ||
+      !enabledShippingModes().includes(requestedModeRaw)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid shipping method." },
+        { status: 400 },
+      );
+    }
+    const shippingMode = requestedModeRaw;
+
+    const email = user?.email ?? parsed.data.email;
+    if (!email) {
+      return NextResponse.json(
+        { error: "Email is required." },
+        { status: 400 },
+      );
+    }
+
+    // ── Checkout idempotency ────────────────────────────────────────────────
+    // The client sends one unguessable checkoutId per checkout session. A retry
+    // (double click, dropped response) must not mint a second order, so we replay
+    // the Razorpay order already bound to this checkout instead of re-creating it.
+    const replayCheckoutId = parsed.data.checkoutId;
+    if (replayCheckoutId) {
+      // A checkoutId is a bearer id for the checkout session, not an order
+      // number, and the lookup below is by id alone. Scope it to the caller so
+      // that learning somebody else's checkoutId cannot hand over their order's
+      // PII or mint a payment capability for it:
+      //   - a signed-in customer may only replay an order bound to their profile;
+      //   - a guest must prove it is the same browser by presenting the payment
+      //     cookie for that order (the same test pay-inline uses), which only the
+      //     original checkout browser holds.
+      // A caller that fails either test is not told whether the checkoutId
+      // existed: it falls through and mints a fresh order, exactly as an unknown
+      // id does.
+      const replayToken = await readPayCookie();
+      const prior = await prisma.order.findFirst({
+        where: {
+          billingDetails: { path: ["checkoutId"], equals: replayCheckoutId },
+        },
+        select: {
+          id: true,
+          orderNumber: true,
+          customerName: true,
+          customerEmail: true,
+          customerPhone: true,
+          total: true,
+          profileId: true,
+          billingDetails: true,
+        },
+      });
+      const ownsPrior =
+        prior !== null &&
+        (profile
+          ? prior.profileId === profile.id
+          : verifyOrderPayCookie(replayToken, prior.billingDetails));
+      if (ownsPrior && prior) {
+        const b = (prior.billingDetails ?? {}) as { razorpayOrderId?: string };
+        if (b.razorpayOrderId) {
+          // Only the hash was stored, so a replay cannot recover the original
+          // plaintext. Rotate the capability instead: this is the same browser
+          // retrying the same checkout, and the superseded token stops working.
+          // The stored exchange code is untouched, so an already-issued
+          // recovery link still works.
+          const replayed = createOrderCapability();
+          // Merge, not replace: replacing the document from the snapshot read
+          // above would revert a concurrent exchange redemption.
+          await patchBillingDetails(prior.id, {
+            guestPaymentTokenHash: replayed.hash,
+          });
+          console.log(
+            `[create-order] replay checkout ${replayCheckoutId} -> order ${prior.orderNumber}`,
+          );
+          const res = NextResponse.json({
+            orderId: prior.id,
+            orderNumber: prior.orderNumber,
+            razorpayOrderId: b.razorpayOrderId,
+            amount: prior.total,
+            currency: "INR",
+            keyId:
+              process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ??
+              process.env.RAZORPAY_KEY_ID,
+            customerName: prior.customerName,
+            customerEmail: prior.customerEmail,
+            customerPhone: prior.customerPhone,
+          });
+          res.cookies.set(PAY_COOKIE, replayed.token, payCookieOptions());
+          return res;
+        }
+        // Order created but Razorpay never returned an order id (gateway error):
+        // fall through and mint a fresh order — the failed attempt is an orphan.
+      }
+    }
+
+    // ── Server-side cart is the single source of truth ──────────────────────
+    const cart = await getCartWithItems();
+    const items = cart?.items ?? [];
+    if (items.length === 0) {
+      return NextResponse.json(
+        { error: "Your cart is empty." },
+        { status: 400 },
+      );
+    }
+
+    const productIds = items.map((i) => i.productId);
+    const variantIds = items
+      .map((i) => i.variantId)
+      .filter((v): v is string => Boolean(v));
+    const [products, variants] = await Promise.all([
+      prisma.product.findMany({
+        where: { id: { in: productIds } },
+        include: {
+          images: {
+            where: { active: true },
+            orderBy: [{ primary: "desc" }, { sortOrder: "asc" }],
+            take: 1,
+          },
+          optionGroups: {
+            where: { enabled: true },
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+            include: {
+              options: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+            },
+          },
+        },
+      }),
+      prisma.productVariant.findMany({ where: { id: { in: variantIds } } }),
+    ]);
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+    let subtotal = 0;
+    const weightRows: {
+      quantity: number;
+      weight: number | null;
+      variantWeight: number | null;
+      lengthCm: number | null;
+      widthCm: number | null;
+      heightCm: number | null;
+    }[] = [];
+    const orderItems: Array<{
+      productId: string;
+      name: string;
+      sku: string | null;
+      unitPrice: number;
+      quantity: number;
+      lineTotal: number;
+      imageUrl: string | null;
+      variantInfo?: Prisma.InputJsonValue;
+    }> = [];
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product || !product.active) {
+        return NextResponse.json(
+          { error: `${item.product.name} is no longer available.` },
+          { status: 400 },
+        );
+      }
+
+      let variant = null;
+      let unitPrice = product.price;
+      let available = availableQuantity(
+        product.stock,
+        product.reservedQuantity,
+      );
+      let configSnapshotData: Prisma.InputJsonValue | undefined;
+
+      const cfg = item.config as { kind?: string; optionIds?: string[] } | null;
+      if (cfg?.kind === "options" && cfg.optionIds?.length) {
+        const resolved = resolveConfiguredPrice(
+          product.optionGroups,
+          product.price,
+          cfg.optionIds,
+        );
+        if (!resolved.ok) {
+          return NextResponse.json(
+            { error: `${product.name}: ${resolved.error}` },
+            { status: 400 },
+          );
+        }
+        unitPrice = resolved.unitPrice;
+        configSnapshotData = configSnapshot(
+          resolved,
+        ) as unknown as Prisma.InputJsonValue;
+      } else if (item.variantId) {
+        variant = variantMap.get(item.variantId);
+        if (!variant || !variant.active) {
+          return NextResponse.json(
+            { error: `A selected variant is no longer available.` },
+            { status: 400 },
+          );
+        }
+        unitPrice = variant.price ?? product.price;
+        available = availableQuantity(variant.stock, variant.reservedQuantity);
+      }
+
+      if (item.quantity > available) {
+        return NextResponse.json(
+          { error: `Only ${available} left in stock for ${product.name}.` },
+          { status: 400 },
+        );
+      }
+
+      const lineTotal = unitPrice * item.quantity;
+      subtotal += lineTotal;
+      weightRows.push({
+        quantity: item.quantity,
+        weight: product.weight,
+        variantWeight: variant?.weight ?? null,
+        lengthCm: product.lengthCm,
+        widthCm: product.widthCm,
+        heightCm: product.heightCm,
+      });
+
+      orderItems.push({
+        productId: product.id,
+        name: product.name,
+        sku: product.sku,
+        unitPrice,
+        quantity: item.quantity,
+        lineTotal,
+        imageUrl: product.images[0]?.url ?? null,
+        ...(configSnapshotData ? { variantInfo: configSnapshotData } : {}),
+        ...(variant && !configSnapshotData
+          ? {
+              variantInfo: {
+                id: variant.id,
+                name: variant.name,
+                options: (variant.options ?? {}) as Prisma.InputJsonValue,
+              },
+            }
+          : {}),
+      });
+    }
+
+    // ── Shipping: authoritative server-side recalculation before payment ────
+    // Free rules first (threshold OR per-product); Delhivery is skipped when
+    // either applies. Otherwise a FRESH provider quote is computed here — the
+    // browser never supplies amounts, so stale/manipulated client quotes
+    // cannot influence the charged total.
+    let shippingAmount = 0;
+    let shippingSnapshot: {
+      provider: string;
+      mode: string;
+      weightGrams: number;
+      originPincode: string;
+      destinationPincode: string;
+      quotedAt: Date;
+      fingerprint: string;
+    } | null = null;
+    if (
+      !isFreeShipping({
+        items: items.map((i) => ({ freeShipping: i.product.freeShipping })),
+        subtotalPaise: subtotal,
+      })
+    ) {
+      let weightGrams: number;
+      try {
+        weightGrams = chargeableWeightGrams(weightRows).weightGrams;
+      } catch {
+        console.error(
+          "[create-order] product(s) missing shipping weight:",
+          weightRows.length,
+        );
+        return NextResponse.json(
+          {
+            error:
+              "Shipping information is unavailable for one or more products.",
+            errorCode: "MISSING_SHIPPING_CONFIGURATION",
+          },
+          { status: 422 },
+        );
+      }
+      const ship = await calculateShipping({
+        destinationPincode: addr.postalCode,
+        paymentMode: "Pre-paid", // Razorpay checkout is pre-paid only
+        weightGrams,
+        mode: shippingMode,
+      });
+      if (!ship.ok) {
+        return NextResponse.json(
+          { error: ship.message, errorCode: ship.errorCode },
+          { status: shipErrorStatus(ship.errorCode) },
+        );
+      }
+      shippingAmount = ship.quote.amountPaise;
+      shippingSnapshot = {
+        provider: ship.quote.provider,
+        mode: ship.quote.mode,
+        weightGrams: ship.quote.weightGrams,
+        originPincode: ship.quote.originPincode,
+        destinationPincode: ship.quote.destinationPincode,
+        quotedAt: new Date(),
+        fingerprint: quoteFingerprint({
+          destinationPincode: addr.postalCode,
+          mode: shippingMode,
+          weightGrams,
+          subtotalPaise: subtotal,
+          itemKeys: items.map(
+            (i) => `${i.productId}:${i.variantId ?? "-"}:${i.quantity}`,
+          ),
+        }),
+      };
+      console.log(
+        `[create-order] quote validated fp=${shippingSnapshot.fingerprint} amount=${shippingAmount}`,
+      );
+    }
+
+    // ── Coupon: validated server-side against the authoritative subtotal ────
+    let discountAmount = 0;
+    let couponEligible: CouponEligible | null = null;
+    if (parsed.data.couponCode) {
+      const res = await validateCoupon(parsed.data.couponCode, subtotal, {
+        profileId: profile?.id ?? null,
+        email,
+      });
+      if (!res.ok) {
+        return NextResponse.json({ error: res.error }, { status: 400 });
+      }
+      discountAmount = res.coupon.discount;
+      couponEligible = res.coupon;
+    }
+
+    const taxAmount = 0;
+    const totalAmount = subtotal + shippingAmount - discountAmount + taxAmount;
+    if (totalAmount <= 0) {
+      return NextResponse.json(
+        { error: "Invalid order amount" },
+        { status: 400 },
+      );
+    }
+
+    // ── Persist saved address BEFORE the gateway call (first one = default) ──
+    if (profile && saveAddress) {
+      const existingCount = await prisma.address.count({
+        where: { profileId: profile.id },
+      });
+      // Cap mirrors /api/account/addresses — never silently exceed the book.
+      if (existingCount < MAX_ADDRESS_BOOK) {
+        await prisma.address.create({
+          data: {
+            profileId: profile.id,
+            label: "Home",
+            streetAddress: addr.streetAddress,
+            apartment: addr.apartment || null,
+            city: addr.city,
+            state: addr.state,
+            postalCode: addr.postalCode,
+            country: "India",
+            phone: addr.phone,
+            isDefault: existingCount === 0,
+          },
+        });
+      }
+    }
+
+    const orderNumber = `KF${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+    // Guest-payment capability: the plaintext goes only into this browser's
+    // HttpOnly cookie below. Only the hash is persisted, and the response body
+    // carries no credential at all.
+    const capability = createOrderCapability();
+    // Separate short-lived code for the confirmation email, so the order can be
+    // paid from another browser without putting a capability in a URL.
+    const exchange = createExchangeCode();
+
+    const order = await prisma.order.create({
+      data: {
+        orderNumber,
+        type: "PRODUCT",
+        status: "ORDER_RECEIVED",
+        paymentStatus: "PENDING",
+        profileId: profile?.id ?? null,
+        customerName:
+          [addr.firstName, addr.lastName].filter(Boolean).join(" ") ||
+          profile?.name ||
+          user?.name ||
+          "Customer",
+        customerEmail: email,
+        customerPhone: addr.phone,
+        subtotal,
+        discount: discountAmount,
+        shipping: shippingAmount,
+        tax: taxAmount,
+        total: totalAmount,
+        currency: "INR",
+        ...(shippingSnapshot
+          ? {
+              shippingProvider: shippingSnapshot.provider,
+              shippingMode: shippingSnapshot.mode,
+              shippingWeightGrams: shippingSnapshot.weightGrams,
+              shippingOriginPincode: shippingSnapshot.originPincode,
+              shippingDestinationPincode: shippingSnapshot.destinationPincode,
+              shippingQuotedAt: shippingSnapshot.quotedAt,
+            }
+          : {}),
+        ...(couponEligible
+          ? couponOrderCreateData(couponEligible, discountAmount, {
+              profileId: profile?.id ?? null,
+              email,
+            })
+          : {}),
+        items: { create: orderItems },
+        shippingAddress: {
+          create: {
+            label: "Delivery",
+            streetAddress: addr.streetAddress,
+            apartment: addr.apartment || null,
+            city: addr.city,
+            state: addr.state,
+            postalCode: addr.postalCode,
+            country: "India",
+            phone: addr.phone,
+          },
+        },
+      },
+    });
+
+    const razorpay = getRazorpay();
+    const razorpayCustomerId = await ensureRazorpayCustomer(razorpay, {
+      profile,
+      name:
+        [addr.firstName, addr.lastName].filter(Boolean).join(" ") ||
+        profile?.name ||
+        user?.name ||
+        "Customer",
+      email,
+      contact: addr.phone,
+    });
+    const rzpOrder = await razorpay.orders.create({
+      amount: totalAmount,
+      currency: "INR",
+      receipt: orderNumber,
+      notes: {
+        orderId: order.id,
+        orderNumber,
+        customerEmail: email,
+      },
+    });
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        billingDetails: {
+          ...(parsed.data.checkoutId
+            ? { checkoutId: parsed.data.checkoutId }
+            : {}),
+          guestPaymentTokenHash: capability.hash,
+          [EXCHANGE_HASH_KEY]: exchange.hash,
+          [EXCHANGE_EXPIRY_KEY]: exchange.expiresAt,
+          [EXCHANGE_STATE_KEY]: EXCHANGE_STATE_REDEEMABLE,
+          razorpayOrderId: rzpOrder.id,
+          razorpayOrderAmount: rzpOrder.amount,
+          ...(razorpayCustomerId ? { razorpayCustomerId } : {}),
+          ...(shippingSnapshot
+            ? { shippingFingerprint: shippingSnapshot.fingerprint }
+            : {}),
+          ...(billingAddr
+            ? {
+                billingAddress: {
+                  fullName: billingAddr.fullName,
+                  addressLine1: billingAddr.addressLine1,
+                  addressLine2: billingAddr.addressLine2 ?? null,
+                  city: billingAddr.city,
+                  state: billingAddr.state,
+                  pinCode: billingAddr.pinCode,
+                  phone: billingAddr.phone,
+                },
+              }
+            : {}),
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    if (couponEligible) await incrementCouponUsage(couponEligible.couponId);
+
+    const res = NextResponse.json({
+      orderId: order.id,
+      orderNumber,
+      razorpayOrderId: rzpOrder.id,
+      amount: rzpOrder.amount,
+      currency: rzpOrder.currency,
+      keyId:
+        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? process.env.RAZORPAY_KEY_ID,
+      customerName: order.customerName,
+      customerEmail: email,
+      customerPhone: addr.phone,
+    });
+    res.cookies.set(PAY_COOKIE, capability.token, payCookieOptions());
+    return res;
+  } catch (error) {
+    console.error("Create Razorpay order error:", error);
+    return NextResponse.json(
+      { error: "Failed to create payment order" },
+      { status: 500 },
+    );
+  }
+}

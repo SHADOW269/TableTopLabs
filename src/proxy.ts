@@ -1,0 +1,111 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { prisma } from "@/lib/db/prisma";
+import {
+  adminPanelEnabled,
+  detectEnvironment,
+  MAINTENANCE_KEY,
+} from "@/lib/config/environment";
+import { decideAuthErrorHandling } from "@/lib/auth/auth-error";
+
+// Next.js redirect() matches sources case-insensitively, so case-variant old
+// URLs are handled here instead of next.config to avoid shadowing real routes.
+const CASED_PATHS: Record<string, string> = {
+  "/About": "/about",
+  "/About/": "/about",
+};
+
+// Paths that are never blocked by maintenance mode.
+const MAINTENANCE_BYPASS = ["/admin", "/auth", "/maintenance"];
+
+// Maintenance flag TTL. Kept short (30s) so it still surfaces immediately-ish
+// after an admin flips the switch, while stopping every single public request
+// (incl. RSC navigations/prefetches) from paying a Postgres round-trip on the
+// critical path. ponytail: per-process cache — on serverless edge, each
+// instance re-checks at most once per 30s, which still cuts DB load ~99%.
+const MAINTENANCE_TTL_MS = 30_000;
+const maintenanceCache = new Map<string, { value: boolean; expires: number }>();
+
+async function isMaintenanceOn(hostname: string): Promise<boolean> {
+  // Maintenance mode is production-only; local/development hosts stay online.
+  if (detectEnvironment(hostname) !== "production") return false;
+
+  const cached = maintenanceCache.get(MAINTENANCE_KEY);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  const setting = await prisma.siteSetting.findUnique({
+    where: { key: MAINTENANCE_KEY },
+  });
+  const value = setting?.value === true;
+  maintenanceCache.set(MAINTENANCE_KEY, {
+    value,
+    expires: Date.now() + MAINTENANCE_TTL_MS,
+  });
+  return value;
+}
+
+function isBypassPath(pathname: string): boolean {
+  return MAINTENANCE_BYPASS.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
+
+function isAdminPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Admin panel kill switch. Server-side routing gate only — requireAdminContext()
+  // in the admin layout still runs and is the real authorization boundary.
+  // 404 (not 403) so a disabled panel does not confirm the route exists.
+  if (isAdminPath(pathname)) {
+    if (!adminPanelEnabled(request.nextUrl.hostname)) {
+      return new NextResponse(null, { status: 404 });
+    }
+  }
+
+  const target = CASED_PATHS[pathname];
+  if (target) {
+    const url = request.nextUrl.clone();
+    url.pathname = target;
+    return NextResponse.redirect(url, 308);
+  }
+
+  // /auth/error: Better Auth appends ?error=<code>&error_description=<raw
+  // provider text> on OAuth failures. Only known-safe codes may reach the
+  // page — everything else is stripped so raw upstream error text never
+  // enters the rendered HTML/RSC payload. The allow list and the reasoning
+  // for each entry live in src/lib/auth/auth-error.ts.
+  if (pathname === "/auth/error") {
+    const decision = decideAuthErrorHandling(request.nextUrl.searchParams);
+    if (decision.action === "redirect") {
+      const url = request.nextUrl.clone();
+      url.search = "";
+      if (decision.code) url.searchParams.set("error", decision.code);
+      return NextResponse.redirect(url, 307);
+    }
+  }
+
+  // Maintenance mode: redirect public routes to /maintenance.
+  // Bypass admin, auth, maintenance itself, and API/static (excluded by matcher).
+  // Production-only: local/development hosts always stay online.
+  if (!isBypassPath(pathname)) {
+    if (await isMaintenanceOn(request.nextUrl.hostname)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/maintenance";
+      return NextResponse.redirect(url, 302);
+    }
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Case-variant redirects + maintenance mode guard.
+     * api/ (incl. Better Auth), track/, and public files are excluded.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|api/|track/|.*\\.(?:webp|png|jpg|jpeg|svg|ico|txt|xml)$).*)",
+  ],
+};

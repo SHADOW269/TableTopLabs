@@ -1,0 +1,413 @@
+import "server-only";
+import { cache } from "react";
+import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db/prisma";
+import { defineCached, TAG, TTL } from "@/lib/caching/cache";
+import { availableQuantity } from "@/lib/cart";
+import { ADMIN_PAGE_SIZE, paginate } from "@/lib/admin/pagination";
+import type { ProductStatus, ProductType } from "@/lib/catalog/product-labels";
+export type { ProductStatus, ProductType };
+export {
+  PRODUCT_STATUS_LABELS,
+  PRODUCT_TYPE_LABELS,
+} from "@/lib/catalog/product-labels";
+export { availableQuantity as availableStock } from "@/lib/cart";
+
+// ─── Categories & brands (admin catalog reads) ──────────────────────────────
+// Admin-only content that feeds the admin category/brand pickers on 5+ pages.
+// Cached under their own tags and invalidated by the matching admin actions
+// (saveCategory / saveBrand / saveProduct call the invalidate* helpers).
+// Note: the product counts embedded in `_count` may lag the 5-min window
+// until a category/product action purges the tag — cosmetic, TTL covers it.
+
+export const getAdminCategories = defineCached(
+  () =>
+    prisma.category.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: { _count: { select: { products: true } } },
+    }),
+  {
+    tags: [TAG.categories],
+    revalidate: TTL.catalog,
+    keys: ["admin-categories"],
+  },
+);
+
+export const getAdminBrands = defineCached(
+  () =>
+    prisma.brand.findMany({
+      orderBy: { name: "asc" },
+      include: { _count: { select: { products: true } } },
+    }),
+  { tags: [TAG.brands], revalidate: TTL.catalog, keys: ["admin-brands"] },
+);
+
+// ─── Work / portfolio (admin content, same tag as the public /work feed) ────
+
+export const getAdminWorkProjects = defineCached(
+  () =>
+    prisma.workProject.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    }),
+  { tags: [TAG.work], revalidate: TTL.stable, keys: ["admin-work-projects"] },
+);
+
+export const getAdminWorkProject = defineCached(
+  (id: string) => prisma.workProject.findUnique({ where: { id } }),
+  { tags: [TAG.work], revalidate: TTL.stable, keys: ["admin-work-project"] },
+);
+
+// ─── Product list ────────────────────────────────────────────────────────────
+
+export type AdminProductQuery = {
+  q?: string;
+  category?: string;
+  brand?: string;
+  stock?: "in" | "low" | "out";
+  status?: ProductStatus | "any";
+  sort?: "newest" | "oldest" | "price-asc" | "price-desc" | "name-asc";
+  page?: number;
+  pageSize?: number;
+};
+
+export const getAdminProducts = cache((params: AdminProductQuery) => {
+  const {
+    q,
+    category,
+    brand,
+    stock,
+    status = "any",
+    sort = "newest",
+    page = 1,
+    pageSize = ADMIN_PAGE_SIZE,
+  } = params;
+
+  const where: Prisma.ProductWhereInput = {
+    ...(status === "any" ? {} : { status }),
+    ...(category ? { category: { slug: category } } : {}),
+    ...(brand ? { brand: { slug: brand } } : {}),
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } },
+            { sku: { contains: q, mode: "insensitive" } },
+            { slug: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+    ...(stock === "in"
+      ? {
+          OR: [
+            { stock: { gt: 0 } },
+            { variants: { some: { active: true, stock: { gt: 0 } } } },
+          ],
+        }
+      : {}),
+    ...(stock === "low"
+      ? { stock: { lte: prisma.product.fields.lowStockThreshold } }
+      : {}),
+    ...(stock === "out"
+      ? {
+          AND: [
+            { stock: { lte: 0 } },
+            { variants: { none: { active: true, stock: { gt: 0 } } } },
+          ],
+        }
+      : {}),
+  };
+
+  const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+    sort === "oldest"
+      ? [{ createdAt: "asc" }]
+      : sort === "price-asc"
+        ? [{ price: "asc" }]
+        : sort === "price-desc"
+          ? [{ price: "desc" }]
+          : sort === "name-asc"
+            ? [{ name: "asc" }]
+            : [{ createdAt: "desc" }];
+
+  // Only what the list renders. Previously also selected slug, costPrice,
+  // createdAt, category.slug, brand.slug and every active variant row — none
+  // were used by the page, and costPrice is a margin secret that had no
+  // business in the RSC payload.
+  const select = {
+    id: true,
+    name: true,
+    sku: true,
+    type: true,
+    status: true,
+    price: true,
+    compareAtPrice: true,
+    stock: true,
+    reservedQuantity: true,
+    lowStockThreshold: true,
+    featured: true,
+    updatedAt: true,
+    category: { select: { name: true } },
+    brand: { select: { name: true } },
+    images: {
+      where: { active: true },
+      orderBy: [{ primary: "desc" }, { sortOrder: "asc" }],
+      take: 1,
+      select: { url: true },
+    },
+  } satisfies Prisma.ProductSelect;
+
+  return Promise.all([
+    prisma.product.count({ where }),
+    prisma.product.findMany({
+      where,
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select,
+    }),
+  ]).then(async ([total, items]) => {
+    const sales = await prisma.orderItem.groupBy({
+      by: ["productId"],
+      where: { productId: { in: items.map((i) => i.id) } },
+      _sum: { quantity: true, lineTotal: true },
+    });
+    const salesByProduct = new Map(
+      sales.map((s) => [
+        s.productId,
+        { units: s._sum.quantity ?? 0, revenue: s._sum.lineTotal ?? 0 },
+      ]),
+    );
+    return paginate(
+      items.map((p) => ({
+        ...p,
+        sales: salesByProduct.get(p.id) ?? { units: 0, revenue: 0 },
+        available: availableQuantity(p.stock, p.reservedQuantity),
+      })),
+      total,
+      page,
+      pageSize,
+    );
+  });
+});
+
+// ─── Product detail ──────────────────────────────────────────────────────────
+
+export const getAdminProduct = cache((id: string) =>
+  prisma.product.findUnique({
+    where: { id },
+    include: {
+      category: true,
+      brand: true,
+      variants: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          images: {
+            where: { active: true },
+            orderBy: [{ primary: "desc" }, { sortOrder: "asc" }],
+          },
+        },
+      },
+      optionGroups: {
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        include: {
+          options: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+        },
+      },
+      images: {
+        where: { active: true },
+        orderBy: [{ primary: "desc" }, { sortOrder: "asc" }],
+      },
+      inventoryMovements: {
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        include: { profile: { select: { name: true, email: true } } },
+      },
+      reviews: { orderBy: { createdAt: "desc" } },
+      orderItems: {
+        select: {
+          id: true,
+          order: {
+            select: { orderNumber: true, createdAt: true, status: true },
+          },
+          quantity: true,
+          unitPrice: true,
+          lineTotal: true,
+          variantInfo: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      },
+    },
+  }),
+);
+
+/**
+ * Slim product read for the admin detail page only. Unlike getAdminProduct
+ * (which the Edit form feeds from and must stay full-width), this narrows to
+ * exactly the fields the detail page renders:
+ *  - reviews capped at 5 (the page only prints the latest handful; the full
+ *    query shipped every review the product ever had into the RSC payload),
+ *  - category/brand/inventoryMovements/images projected to used columns.
+ * ProductForm is never given this shape.
+ */
+export const getAdminProductOverview = cache((id: string) =>
+  prisma.product.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      sku: true,
+      barcode: true,
+      description: true,
+      type: true,
+      status: true,
+      featured: true,
+      popular: true,
+      isNew: true,
+      price: true,
+      compareAtPrice: true,
+      costPrice: true,
+      gstRate: true,
+      stock: true,
+      reservedQuantity: true,
+      lowStockThreshold: true,
+      allowBackorders: true,
+      inventoryTracking: true,
+      weight: true,
+      lengthCm: true,
+      widthCm: true,
+      heightCm: true,
+      shippingClass: true,
+      freeShipping: true,
+      shippingRestrictions: true,
+      features: true,
+      whatsIncluded: true,
+      specifications: true,
+      category: { select: { name: true } },
+      brand: { select: { name: true } },
+      variants: {
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          barcode: true,
+          price: true,
+          compareAtPrice: true,
+          stock: true,
+          reservedQuantity: true,
+          weight: true,
+          active: true,
+        },
+      },
+      images: {
+        where: { active: true },
+        orderBy: [{ primary: "desc" }, { sortOrder: "asc" }],
+        select: {
+          id: true,
+          url: true,
+          alt: true,
+          primary: true,
+          sortOrder: true,
+        },
+      },
+      inventoryMovements: {
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: {
+          id: true,
+          delta: true,
+          reason: true,
+          createdAt: true,
+          profile: { select: { name: true, email: true } },
+        },
+      },
+      reviews: { orderBy: { createdAt: "desc" }, take: 5 },
+      orderItems: {
+        select: {
+          id: true,
+          order: {
+            select: { orderNumber: true, createdAt: true, status: true },
+          },
+          quantity: true,
+          unitPrice: true,
+          lineTotal: true,
+          variantInfo: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      },
+    },
+  }),
+);
+
+export const getInventoryRows = cache(() =>
+  prisma.product.findMany({
+    where: { status: { not: "ARCHIVED" } },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      stock: true,
+      reservedQuantity: true,
+      lowStockThreshold: true,
+      variants: {
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          stock: true,
+          reservedQuantity: true,
+        },
+      },
+    },
+  }),
+);
+
+export const getInventoryMovements = cache((take = 50) =>
+  prisma.inventoryMovement.findMany({
+    orderBy: { createdAt: "desc" },
+    take,
+    include: {
+      product: { select: { id: true, name: true, slug: true } },
+      variant: { select: { name: true } },
+      profile: { select: { name: true, email: true } },
+    },
+  }),
+);
+
+// ─── Dashboard metrics ───────────────────────────────────────────────────────
+
+export const getTopProducts = cache(async (take = 5) => {
+  const sales = (
+    await prisma.orderItem.groupBy({
+      by: ["productId"],
+      _sum: { quantity: true, lineTotal: true },
+      orderBy: { _sum: { quantity: "desc" } },
+      take,
+    })
+  ).filter((s): s is typeof s & { productId: string } => s.productId !== null);
+  const products = await prisma.product.findMany({
+    where: { id: { in: sales.map((s) => s.productId) } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      price: true,
+      images: {
+        where: { active: true },
+        orderBy: { primary: "desc" },
+        take: 1,
+        select: { url: true },
+      },
+    },
+  });
+  const byId = new Map(products.map((p) => [p.id, p]));
+  return sales
+    .map((s) => {
+      const p = byId.get(s.productId);
+      return p
+        ? { ...p, units: s._sum.quantity ?? 0, revenue: s._sum.lineTotal ?? 0 }
+        : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+});
