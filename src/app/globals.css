@@ -9911,7 +9911,7 @@ a.reviews-page:hover {
   padding: 0 var(--pad-x);
 }
 .work-page {
-  overflow: clip; 
+  overflow: visible;
 }
 
 .work-page .wrap {
@@ -9940,6 +9940,63 @@ a.reviews-page:hover {
   line-height: 1.65;
   max-width: 520px;
   margin: 0;
+}
+
+/* New hero with decorative keyboard pattern */
+.work-hero-new {
+  position: relative;
+  padding: calc(var(--nav-h) + clamp(28px, 4vw, 44px)) 0 clamp(8px, 1vw, 12px);
+  overflow: hidden;
+}
+.work-wrap-new {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: 0 var(--pad-x);
+  position: relative;
+  z-index: 2;
+}
+.work-hero-content {
+  width: 100%;
+}
+.work-hero-title-new {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  color: var(--t1);
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  margin: 0 0 18px;
+}
+.work-hero-desc-new {
+  color: var(--t2);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 540px;
+  margin: 0;
+}
+
+/* Subtle decorative keyboard pattern in hero background */
+.work-hero-new::before {
+  content: "";
+  position: absolute;
+  top: clamp(40px, 6vw, 80px);
+  right: clamp(-80px, -6vw, -100px);
+  width: 280px;
+  height: 140px;
+  opacity: 0.08;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(226, 232, 0, 0.18) 0%, transparent 20%),
+    radial-gradient(circle at 80% 70%, rgba(226, 232, 0, 0.12) 0%, transparent 18%),
+    radial-gradient(circle at 45% 50%, rgba(226, 232, 0, 0.08) 0%, transparent 15%),
+    radial-gradient(circle at 70% 40%, rgba(226, 232, 0, 0.06) 0%, transparent 12%),
+    radial-gradient(circle at 30% 80%, rgba(226, 232, 0, 0.08) 0%, transparent 16%),
+    radial-gradient(circle at 65% 60%, rgba(226, 232, 0, 0.05) 0%, transparent 10%),
+    radial-gradient(circle at 50% 25%, rgba(226, 232, 0, 0.07) 0%, transparent 14%),
+    radial-gradient(circle at 25% 60%, rgba(226, 232, 0, 0.06) 0%, transparent 12%),
+    radial-gradient(circle at 75% 20%, rgba(226, 232, 0, 0.05) 0%, transparent 10%),
+    radial-gradient(circle at 15% 70%, rgba(226, 232, 0, 0.04) 0%, transparent 8%);
+  transform: rotate(10deg) skew(-5deg) scale(0.95);
 }
 
 
@@ -9992,8 +10049,8 @@ a.reviews-page:hover {
 
 
 .work-portfolio {
-  
   padding: clamp(28px, 3.5vw, 44px) 0 clamp(56px, 4vw, 72px);
+  overflow: visible;
 }
 .work-grid {
   display: grid;
@@ -10115,6 +10172,223 @@ a.reviews-page:hover {
   transform: translateX(2px);
 }
 
+
+/* Editorial layout: featured large on left, stack on right */
+.work-editorial-new {
+  display: grid;
+  grid-template-columns: 2.1fr 0.9fr;
+  gap: clamp(24px, 2.8vw, 40px);
+  align-items: start;
+  align-content: start;
+}
+
+/* Ensure grid rows don't stretch */
+.work-editorial-new > * {
+  align-self: start;
+  min-height: 0;
+  width: 100%;
+}
+@media (max-width: 1240px) {
+  .work-editorial-new {
+    grid-template-columns: 1fr;
+  }
+  .work-featured-media-new {
+    aspect-ratio: 16/9;
+  }
+  .work-side-card-new {
+    grid-template-columns: 180px 1fr;
+  }
+}
+
+.work-featured-wrap { }
+.work-featured-new {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  border: 1px solid var(--acc);
+  background: var(--bg1);
+  text-decoration: none;
+  position: relative;
+  min-height: 0;
+  max-height: 100%;
+  transition:
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    transform 0.35s var(--ease-out);
+}
+
+/* Side card base styles */
+.work-side-card-new {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 1px solid var(--bdr);
+  background: var(--bg1);
+  text-decoration: none;
+  position: relative;
+  transition:
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+.work-side-media-new {
+  position: relative;
+  aspect-ratio: 4/3;
+  overflow: hidden;
+}
+.work-side-body-new {
+  padding: clamp(16px, 2vw, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Side stack container */
+.work-side-stack-new {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.work-featured-new:hover {
+  box-shadow: 0 0 0 2px rgba(226, 232, 0, 0.3), var(--shadow-card);
+  transform: translateY(-4px);
+}
+.work-featured-carousel {
+  display: block;
+}
+.work-featured-media-new {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 21/13;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+/* Image container for Next.js Image with fill prop */
+.work-featured-img-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 21/13;
+  overflow: hidden;
+}
+.work-featured-new:hover .work-featured-media-new img {
+  transform: scale(1.02);
+}
+.work-card-flag {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  padding: 4px 10px;
+  background: var(--acc);
+  color: #000;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Carousel navigation buttons inside image */
+/* Carousel buttons removed - using simple View Project button instead */
+
+.work-featured-body-new {
+  padding: clamp(24px, 2.5vw, 36px) clamp(20px, 2vw, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.work-featured-grid-new {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: flex-start;
+}
+.work-featured-info-new {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-right: 1px solid var(--bdr);
+  padding-right: 24px;
+}
+.work-featured-actions-new {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  white-space: nowrap;
+}
+.work-featured-title-new {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: clamp(1.4rem, 2vw, 1.8rem);
+  letter-spacing: -0.02em;
+  color: var(--t1);
+  line-height: 1.1;
+}
+.work-featured-desc-new {
+  color: var(--t2);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* View Project button */
+.work-featured-cta-btn {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--acc);
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--acc);
+  background: transparent;
+  transition:
+    all 0.2s ease;
+  display: inline-block;
+  cursor: pointer;
+}
+.work-featured-actions-new .work-card-photos + .work-featured-cta-btn {
+  margin-top: 4px;
+}
+.work-featured-cta-btn:hover {
+  background: var(--acc);
+  color: #000;
+  transform: translateY(-1px);
+}
+
+/* Responsive adjustments for featured card */
+@media (max-width: 1240px) {
+  .work-featured-grid-new {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .work-featured-info-new {
+    border-right: none;
+    border-bottom: 1px solid var(--bdr);
+    padding-bottom: 16px;
+    padding-right: 0;
+  }
+  .work-featured-actions-new {
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .work-featured-cta-btn {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+  }
+  .work-featured-title-new {
+    font-size: clamp(1.25rem, 1.8vw, 1.6rem);
+  }
+}
 
 .work-page .reviews-section {
   padding-top: clamp(28px, 3vw, 38px);
@@ -22015,5 +22289,85 @@ body {
 
   .ms-pdp__buy-ctas {
     width: 100%;
+  }
+}
+
+@media (max-width: 1240px) {
+  .work-editorial-new {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .work-featured-body-new {
+    padding: 24px;
+  }
+  .work-keyboard-graphic {
+    top: 30px;
+    right: -60px;
+    width: 200px;
+    height: 100px;
+    opacity: 0.1;
+    transform: rotate(8deg);
+  }
+}
+@media (max-width: 960px) {
+  .work-hero-new {
+    padding-top: calc(var(--nav-h) + 28px);
+  }
+  .work-hero-title-new {
+    font-size: clamp(2.2rem, 8vw, 3.2rem);
+    margin: 0 0 14px;
+  }
+  .work-hero-desc-new {
+    font-size: 1rem;
+    line-height: 1.6;
+    max-width: 480px;
+  }
+  .work-hero-new::before {
+    top: 20px;
+    right: -40px;
+    width: 160px;
+    height: 80px;
+    opacity: 0.08;
+    transform: rotate(5deg) skew(-5deg) scale(0.9);
+  }
+  .work-side-card-new {
+    grid-template-columns: 1fr;
+  }
+  .work-side-body-new {
+    padding: 16px 16px 16px 0;
+  }
+  .work-page .reviews-summary {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .work-page .reviews-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cta-wrap {
+    padding: 64px var(--pad-x);
+  }
+  .cta-visual {
+    min-height: 240px;
+  }
+}
+@media (max-width: 640px) {
+  .work-side-stack-new {
+    gap: 14px;
+  }
+  .work-hero-title-new {
+    font-size: clamp(1.8rem, 7vw, 2.6rem);
+  }
+  .work-hero-desc-new {
+    font-size: 0.9rem;
+  }
+  .work-page .reviews-section {
+    padding: 60px 0;
+  }
+  .work-page .reviews-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .work-page .reviews-summary {
+    padding: 20px;
   }
 }
