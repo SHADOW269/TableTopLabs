@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ShopCatalog } from "@/components/shop/ShopCatalog";
-import { LabValues } from "@/components/home/LabValues";
+import { BuildCta } from "@/components/ui/BuildCta";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -39,7 +39,7 @@ export default async function ShopPage({ searchParams }: Props) {
           <ShopCatalog searchParams={sp} />
         </div>
       </section>
-      <LabValues />
+      <BuildCta primaryHref="/workshop" />
     </main>
   );
 }

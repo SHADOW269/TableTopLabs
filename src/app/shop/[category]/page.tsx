@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { PageHero } from "@/components/ui/PageHero";
-import { LabValues } from "@/components/home/LabValues";
+import { BuildCta } from "@/components/ui/BuildCta";
 import { ShopControlBar } from "@/components/shop/ShopControlBar";
 import { ShopGrid } from "@/components/shop/ShopGrid";
 import {
@@ -81,7 +81,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           />
         </div>
       </section>
-      <LabValues />
+      <BuildCta primaryHref="/workshop" />
       <JsonLd
         data={breadcrumbJsonLd([
           { name: "Shop", path: "/shop" },

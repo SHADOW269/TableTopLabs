@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ShopCatalog } from "@/components/shop/ShopCatalog";
-import { LabValues } from "@/components/home/LabValues";
+import { BuildCta } from "@/components/ui/BuildCta";
 import { buildMetadata } from "@/lib/seo";
 import { SECTION_LABELS } from "@/lib/catalog/shop";
 
@@ -35,7 +35,7 @@ export default async function ClearancePage({ searchParams }: Props) {
           <ShopCatalog section="clearance" searchParams={sp} />
         </div>
       </section>
-      <LabValues />
+      <BuildCta primaryHref="/workshop" />
     </main>
   );
 }

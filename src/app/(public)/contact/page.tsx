@@ -37,7 +37,7 @@ export default function ContactPage() {
   return (
     <main className="ri-page">
       <header className="ri-hero">
-        <p className="sec-num">{"// Contact"}</p>
+        <p className="sec-num">Contact</p>
         <h1 className="ri-hero-title">Contact TableTopLabs</h1>
         <p className="ri-hero-desc">
           Questions about a repair, a quote for PCB work, or a custom build in

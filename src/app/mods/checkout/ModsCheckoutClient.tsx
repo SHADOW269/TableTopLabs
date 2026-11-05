@@ -62,7 +62,7 @@ export default function ModsCheckoutClient({
       <main className="checkout-page">
         <section className="svc-section">
           <div className="wrap">
-            <p className="sec-num">{"// CHECKOUT"}</p>
+            <p className="sec-num">CHECKOUT</p>
             <h1 className="sec-title font-display mb-2">Mods Checkout</h1>
             <div className="card qcard p-10 text-center mt-8">
               <p className="ct mb-2">No mods configuration found</p>

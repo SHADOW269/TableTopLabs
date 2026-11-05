@@ -86,7 +86,7 @@ function OrderUnverified() {
       <section className="svc-section order-success-page">
         <div className="wrap">
           <header className="order-success-hero">
-            <p className="order-success-eyebrow">{"// Order"}</p>
+            <p className="order-success-eyebrow">Order</p>
             <div
               className="order-success-check"
               aria-hidden="true"
@@ -234,7 +234,7 @@ export default async function OrderSuccessPage({
       <section className="svc-section order-success-page">
         <div className="wrap">
           <header className="order-success-hero">
-            <p className="order-success-eyebrow">{"// Order Confirmed"}</p>
+            <p className="order-success-eyebrow">Order Confirmed</p>
             <div
               className="order-success-check"
               aria-hidden="true"

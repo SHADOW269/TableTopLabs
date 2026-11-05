@@ -9,7 +9,7 @@ const EMPTY_STATES: Partial<
   Record<"custom" | "new" | "clearance", EmptyStateConfig>
 > = {
   custom: {
-    eyebrow: "// Made to Order",
+    eyebrow: "Made to Order",
     title: "Custom Builds, Made to Order",
     desc: "Tell us what you're looking for and we'll help you put together the right keyboard, switches, keycaps and modifications.",
     actions: [

@@ -15,7 +15,7 @@ export function AccountModal({
   onClose,
   children,
 }: {
-  /** Small monospace eyebrow above the title, e.g. "// Shipping Address". */
+  /** Small monospace eyebrow above the title, e.g. "Shipping Address". */
   kicker?: string;
   title: string;
   subtitle?: string;

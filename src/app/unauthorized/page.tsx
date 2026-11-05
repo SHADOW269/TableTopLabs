@@ -11,7 +11,7 @@ export default function Unauthorized() {
     <main className="pt-[calc(var(--nav-h)+80px)] pb-24">
       <div className="wrap text-center">
         <div className="cta-wrap mx-auto">
-          <span className="cta-tag">403 // Access Denied</span>
+          <span className="cta-tag">403 Access Denied</span>
           <h1 className="cta-title">
             You don&apos;t have
             <br />

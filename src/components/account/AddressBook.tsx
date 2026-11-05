@@ -163,7 +163,7 @@ export function AddressBook() {
     <section className="account-section">
       <header className="account-section-header">
         <div>
-          <span className="account-kicker">{"// Saved Addresses"}</span>
+          <span className="account-kicker">Saved Addresses</span>
           <h2 className="account-section-title">Shipping Addresses</h2>
           <p className="account-section-desc">
             Where your builds and repairs get shipped
@@ -276,7 +276,7 @@ export function AddressBook() {
 
       {showModal && (
         <AccountModal
-          kicker={"// Shipping Address"}
+          kicker="Shipping Address"
           title={editingAddress ? "Edit Address" : "Add Address"}
           subtitle={
             editingAddress

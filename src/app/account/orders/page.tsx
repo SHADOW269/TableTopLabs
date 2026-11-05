@@ -101,7 +101,7 @@ export default async function OrdersPage() {
       <section className="account-section">
         <header className="account-section-header">
           <div>
-            <span className="account-kicker">{"// Your Reviews"}</span>
+            <span className="account-kicker">Your Reviews</span>
             <h2 className="account-section-title">Your Reviews</h2>
             <p className="account-section-desc">
               Reviews you&apos;ve submitted and their status

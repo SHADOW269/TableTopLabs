@@ -71,7 +71,7 @@ export default function MaintenancePage() {
               marginBottom: 20,
             }}
           >
-            {"// MAINTENANCE"}
+            MAINTENANCE
           </div>
 
           {/* Heading */}

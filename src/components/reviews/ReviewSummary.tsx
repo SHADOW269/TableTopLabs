@@ -1,7 +1,7 @@
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { ReviewStars } from "@/components/reviews/ReviewStars";
 
-/** The two-column rating summary (big average + 5★ bar distribution). */
+/** Horizontal rating summary (big average + 5★ bar distribution). */
 export function ReviewSummary({
   count,
   average,
@@ -29,6 +29,8 @@ export function ReviewSummary({
           Based on {count} {count === 1 ? "review" : "reviews"}
         </p>
       </div>
+
+      <div className="reviews-summary-divider" />
 
       <div className="reviews-summary-stats">
         <div className="reviews-dist">

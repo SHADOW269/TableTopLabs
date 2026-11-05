@@ -226,7 +226,7 @@ export function SettingsPanel({ newsletter, hasPassword }: SettingsPanelProps) {
         <header className="account-section-header">
           <div>
             <span className="account-kicker account-kicker--danger">
-              {"// Danger Zone"}
+              Danger Zone
             </span>
             <h2 className="account-section-title">Irreversible Actions</h2>
             <p className="account-section-desc">

@@ -46,7 +46,7 @@ export default async function TrackOrderPage({
   return (
     <main className="track-page">
       <PageHero
-        tag="// SUPPORT"
+        tag="SUPPORT"
         title="Track your order."
         desc="Enter your order number below to see the latest status of your TableTopLabs order — from order placed to delivered."
       />

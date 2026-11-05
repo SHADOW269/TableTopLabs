@@ -7,10 +7,10 @@ import { AddToCart } from "@/components/shop/AddToCart";
 import { ProductConfigurator } from "@/components/shop/ProductConfigurator";
 import { PriceUpdater } from "@/components/shop/PriceUpdater";
 import { ShippingWarranty } from "@/components/shop/ShippingWarranty";
-import { LabValues } from "@/components/home/LabValues";
 import { ProductGallery } from "@/components/shop/ProductGallery";
 import { ReviewSection } from "@/components/reviews/ReviewSection";
 import { RelatedProducts } from "@/components/shop/RelatedProducts";
+import { BuildCta } from "@/components/ui/BuildCta";
 import {
   ReviewSectionSkeleton,
   RelatedProductsSkeleton,
@@ -420,7 +420,7 @@ export default async function ProductPage({
         </Suspense>
       </section>
 
-      <LabValues />
+      <BuildCta primaryHref="/workshop" />
 
       <JsonLd
         data={[

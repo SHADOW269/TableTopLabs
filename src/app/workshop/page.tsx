@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { buildMetadata, JsonLd, SITE_URL } from "@/lib/seo";
 import { getCurrentAuth } from "@/lib/auth/session";
 import { RepairIntake } from "@/components/repair/RepairIntake";
-import { LabValues } from "@/components/home/LabValues";
+import { BuildCta } from "@/components/ui/BuildCta";
 
 export const metadata: Metadata = buildMetadata({
   title: "Keyboard Workshop — Repairs, Builds & Restoration | TableTopLabs",
@@ -33,17 +33,22 @@ export default async function RepairPage() {
   const { profile } = await getCurrentAuth();
 
   return (
-    <main className="ri-page">
+    <main className="work-page ri-page ri-page--v2">
       <JsonLd data={WORKSHOP_SERVICE_JSONLD} />
-      <header className="ri-hero">
-        <p className="sec-num">{"// Workshop"}</p>
-        <h1 className="ri-hero-title">Keyboard Workshop</h1>
-        <p className="ri-hero-desc">
-          Repairs, custom work, builds, restoration, and technical services for
-          keyboards and desk setups — tell us what you&apos;re working on and
-          we&apos;ll help you figure out the next step.
-        </p>
-      </header>
+
+      <section className="ri-hero-new">
+        <div className="work-wrap-new">
+          <div className="ri-hero-copy">
+            <p className="ri2-eyebrow">Workshop</p>
+            <h1 className="ri-hero-title-new">Keyboard Workshop</h1>
+            <p className="ri-hero-desc-new">
+              Repairs, custom work, builds, restoration, and technical services
+              for keyboards and desk setups — tell us what you&apos;re working
+              on and we&apos;ll help you figure out the next step.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <RepairIntake
         defaults={{
@@ -53,7 +58,7 @@ export default async function RepairPage() {
         }}
       />
 
-      <LabValues />
+      <BuildCta />
     </main>
   );
 }

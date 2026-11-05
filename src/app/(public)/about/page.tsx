@@ -147,7 +147,7 @@ export default function AboutPage() {
 
       <section className="svc-section" aria-labelledby="t-chronicle">
         <div className="wrap">
-          <SectionHead num="// Chronicle" title="The Development Path" />
+          <SectionHead num="Chronicle" title="The Development Path" />
           <div className="flex flex-col max-w-[760px]">
             {CHRONICLE.map((c, i) => (
               <div key={c.year} className="flex gap-5">
@@ -182,7 +182,7 @@ export default function AboutPage() {
 
       <section className="svc-section" aria-labelledby="t-contact">
         <div className="wrap">
-          <SectionHead num="// Connect" title="Find Me Online" />
+          <SectionHead num="Connect" title="Find Me Online" />
           <div className="cards">
             {SOCIAL.map((s) => (
               <a

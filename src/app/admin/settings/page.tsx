@@ -33,7 +33,7 @@ export default async function AdminSettingsPage() {
       }}
     >
       <div>
-        <span className="sec-num">{"// System Settings"}</span>
+        <span className="sec-num">System Settings</span>
       </div>
 
       <div>

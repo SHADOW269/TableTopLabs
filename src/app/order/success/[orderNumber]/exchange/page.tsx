@@ -50,7 +50,7 @@ export default async function ExchangePage({
       <section className="svc-section order-success-page">
         <div className="wrap">
           <header className="order-success-hero">
-            <p className="order-success-eyebrow">{"// Payment Access"}</p>
+            <p className="order-success-eyebrow">Payment Access</p>
             <h1 className="order-success-title">Open your order</h1>
             <p className="order-success-sub">
               {order

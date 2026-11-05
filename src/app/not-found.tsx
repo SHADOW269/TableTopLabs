@@ -16,7 +16,7 @@ export default function NotFound() {
     <main className="pt-[calc(var(--nav-h)+80px)] pb-24">
       <div className="wrap text-center">
         <div className="cta-wrap mx-auto">
-          <span className="cta-tag">404 // Not Found</span>
+          <span className="cta-tag">404 Not Found</span>
           <h1 className="cta-title">
             This key
             <br />

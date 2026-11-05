@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Reveal } from "@/components/home/Reveal";
 import { ReviewSection } from "@/components/reviews/ReviewSection";
-import { CtaSection } from "@/components/ui/CtaSection";
+import { BuildCta } from "@/components/ui/BuildCta";
 import { buildMetadata } from "@/lib/seo";
 import { getWorkProjects } from "@/lib/catalog/data";
 import { FeaturedCarousel } from "@/components/work/FeaturedCarousel";
@@ -79,7 +79,7 @@ export default async function WorkPage({
         className="work-portfolio"
         aria-labelledby={gridProjects.length > 0 ? "work-grid-heading" : undefined}
       >
-        <div className="work-wrap">
+        <div className="work-wrap-new">
           {gridProjects.length === 0 ? (
             <Reveal>
               <div className="work-empty">
@@ -96,7 +96,6 @@ export default async function WorkPage({
                 Recent projects and workshop builds.
               </h2>
 
-              <div className="work-wrap">
               <div className="work-editorial-new">
                 {/* Featured project - left column */}
                 <Reveal as="div" className="work-featured-wrap" delay={0}>
@@ -130,7 +129,9 @@ export default async function WorkPage({
                             <span className="work-side-title">{p.title}</span>
                             <span className="work-side-foot">
                               <span className="work-card-photos">
-                                {imgs.length > 1 ? `${imgs.length} Photos` : ""}
+                                {imgs.length > 0
+                                  ? `${imgs.length} ${imgs.length === 1 ? "Photo" : "Photos"}`
+                                  : ""}
                               </span>
                               <span className="work-side-cta">View →</span>
                             </span>
@@ -140,7 +141,6 @@ export default async function WorkPage({
                     );
                   })}
                 </div>
-              </div>
               </div>
 
               {gridPages > 1 && (
@@ -169,18 +169,7 @@ export default async function WorkPage({
       <ReviewSection scope={{ type: "site" }} page={page} />
 
       {/* ── CTA ──────────────────────────────────────────────────────────── */}
-      <CtaSection
-        title={
-          <>
-            Ready to Build
-            <br />
-            Something Better?
-          </>
-        }
-        desc="Have a keyboard that needs work or want something custom? Real builds and repairs, handled the same way in the TableTopLabs workshop."
-        primaryLabel="Start a Project →"
-        primaryHref="/shop"
-      />
+      <BuildCta desc="Have a keyboard that needs work or want something custom? Real builds and repairs, handled the same way in the TableTopLabs workshop." />
     </main>
   );
 }

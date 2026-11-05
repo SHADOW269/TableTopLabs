@@ -69,7 +69,7 @@ export default function ProfilePage() {
       <section className="account-section account-section--details">
         <header className="account-section-header">
           <div>
-            <span className="account-kicker">{"// Personal Information"}</span>
+            <span className="account-kicker">Personal Information</span>
             <h2 className="account-section-title">Your Details</h2>
             <p className="account-section-desc">
               Used on your orders, invoices and shipping labels

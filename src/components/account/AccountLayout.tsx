@@ -43,7 +43,7 @@ export function AccountLayout({ children }: AccountLayoutProps) {
         <h1 className="sr-only">{header.title}</h1>
       ) : (
         <header className="account-page-header">
-          <span className="account-kicker">{"// Your Account"}</span>
+          <span className="account-kicker">Your Account</span>
           <h1 className="account-page-title">
             {header?.title ?? "My Account"}
           </h1>
