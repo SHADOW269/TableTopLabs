@@ -24,7 +24,7 @@ import { EMAIL_TEMPLATE_ENV } from "@/lib/email/templates";
 
 const REAL = "customer@example.org";
 const TEST = "qa-inbox@example.net";
-const CONTACT = "contact@keebforge.in";
+const CONTACT = "contact@tabletopslab.in";
 
 type SendArgs = {
   to?: unknown;

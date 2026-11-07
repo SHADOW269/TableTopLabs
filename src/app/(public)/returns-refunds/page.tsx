@@ -114,7 +114,7 @@ export default function ReturnsRefundsPage() {
                 </li>
                 <li>
                   Use the <a href="/contact">contact page</a> or email{" "}
-                  <a href="mailto:contact@keebforge.in">contact@keebforge.in</a>
+                  <a href="mailto:contact@tabletopslab.in">contact@tabletopslab.in</a>
                   .
                 </li>
               </ul>

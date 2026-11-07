@@ -884,12 +884,12 @@ for (const [label, patch, reason] of [
 
 {
   const diagnostic = resendErrorDiagnostic({
-    message: "The recipient address aditi@example.com bounced off contact@keebforge.in",
+    message: "The recipient address aditi@example.com bounced off contact@tabletopslab.in",
     statusCode: 422,
     name: "validation_error",
   });
   assert.equal(diagnostic, "resend:validation_error:422");
-  for (const leak of ["aditi@example.com", "bounced", "contact@keebforge.in"]) {
+  for (const leak of ["aditi@example.com", "bounced", "contact@tabletopslab.in"]) {
     assert.ok(!diagnostic.includes(leak), "diagnostic must not leak the message");
   }
   assert.equal(resendErrorDiagnostic({ message: "secrets!" }), "resend:unknown:na");

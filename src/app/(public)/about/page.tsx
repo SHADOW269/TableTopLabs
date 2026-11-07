@@ -7,49 +7,14 @@ import { buildMetadata } from "@/lib/seo";
 export const metadata: Metadata = buildMetadata({
   title: "About TableTopLabs — Keyboard & Mouse Repair Workshop in India",
   description:
-    "Hi, I'm Hardik Sharma. TableTopLabs is a Jammu & Kashmir workshop for mail-in micro-soldering repairs, custom keyboard layouts and high-consistency tuning — serving enthusiasts across India.",
+    "A keyboard & mouse repair workshop in India — mail-in micro-soldering, custom layouts and high-consistency tuning from Jammu & Kashmir.",
   path: "/about",
 });
-
-const STATS = [
-  { num: "600+", label: "Switches Lubed" },
-  { num: "50+", label: "Keyboards Serviced" },
-  { num: "India", label: "Mail-in Service" },
-  { num: "Eng.", label: "Electronics Background" },
-];
-
-const CHRONICLE = [
-  {
-    year: "2023",
-    title: "First Mechanical Keyboard",
-    desc: "Got my first mechanical keyboard.",
-  },
-  {
-    year: "2024",
-    title: "Modding Begins",
-    desc: "Began experimenting with mechanical physical layouts, fine-tuning switch acoustics, and researching lubricant composition behavior types.",
-  },
-  {
-    year: "2025",
-    title: "PCB Repairs",
-    desc: "Expanded workspace infrastructure to address trace micro-soldering repairs, fixing torn pads, and correcting logic element shorts.",
-  },
-  {
-    year: "2026",
-    title: "TableTopLabs Launched",
-    desc: "Launched a unified national portal to offer verified board repairs and switch services across India.",
-  },
-  {
-    year: "Today",
-    title: "Serving All of India",
-    desc: "Processing custom tier layout builds, split ergonomic systems, and high-tier micro-soldering with consistent execution metrics.",
-  },
-];
 
 const SOCIAL = [
   {
     label: "Discord Chat",
-    value: "hardy_022",
+    value: "tabletopslabs",
     href: "https://discord.com/users/843113968734437376",
     icon: (
       <svg viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true">
@@ -59,7 +24,7 @@ const SOCIAL = [
   },
   {
     label: "Reddit",
-    value: "u/hardy_022",
+    value: "tabletopslabs",
     href: "https://www.reddit.com/user/hardy_022/",
     icon: (
       <svg viewBox="0 0 24 24" fill="#FF4500" aria-hidden="true">
@@ -69,7 +34,7 @@ const SOCIAL = [
   },
   {
     label: "Instagram",
-    value: "@nowitshardik",
+    value: "tabletopslabs",
     href: "https://www.instagram.com/nowitshardik/",
     icon: (
       <svg viewBox="0 0 24 24" fill="#E4405F" aria-hidden="true">
@@ -79,8 +44,8 @@ const SOCIAL = [
   },
   {
     label: "Direct Mail",
-    value: "contact@keebforge.in",
-    href: "mailto:contact@keebforge.in",
+    value: "contact@tabletopslab.in",
+    href: "mailto:contact@tabletopslab.in",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -102,83 +67,10 @@ export default function AboutPage() {
   return (
     <main>
       <PageHero
-        tag="About"
-        title="About TableTopLabs"
-        desc="A keyboard & mouse repair workshop in India — mail-in micro-soldering, custom layouts and high-consistency tuning from Jammu & Kashmir."
+        tag=""
+        title="A keyboard & mouse repair workshop in India — mail-in micro-soldering, custom layouts and high-consistency tuning from Jammu & Kashmir."
+        desc=""
       />
-
-      <section className="svc-section" aria-labelledby="t-hello">
-        <div className="wrap">
-          <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr] items-start">
-            <div>
-              <SectionHead title="Hi, I'm Hardik Sharma." />
-              <p className="text-[0.92rem] leading-relaxed text-[var(--t2)] mb-4">
-                I started TableTopLabs because I wasn&apos;t satisfied with rushed
-                keyboard services. Every build that arrives on my bench is
-                treated like my own — from complex PCB diagnostics to the final
-                keypress test.
-              </p>
-              <p className="text-[0.92rem] leading-relaxed text-[var(--t2)]">
-                Operating out of{" "}
-                <strong style={{ color: "var(--t1)" }}>
-                  Jammu &amp; Kashmir
-                </strong>
-                , I manage a technical workshop specialized for mail-in
-                micro-soldering repairs, custom layout designs, and
-                high-consistency tuning. Your hardware is processed safely with
-                technical oversight and premium logic analyzers.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {STATS.map((s) => (
-                <div key={s.label} className="card !p-5 text-center">
-                  <div className="font-display font-bold text-[clamp(1.4rem,3vw,2rem)] text-[var(--acc)] leading-none">
-                    {s.num}
-                  </div>
-                  <div className="mt-2 text-[0.62rem] uppercase tracking-[0.08em] text-[var(--t3)]">
-                    {s.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="svc-section" aria-labelledby="t-chronicle">
-        <div className="wrap">
-          <SectionHead num="Chronicle" title="The Development Path" />
-          <div className="flex flex-col max-w-[760px]">
-            {CHRONICLE.map((c, i) => (
-              <div key={c.year} className="flex gap-5">
-                <div className="flex flex-col items-center">
-                  <span className="w-3 h-3 rounded-full border-2 border-[var(--acc)] bg-[var(--bg)] mt-1.5" />
-                  {i < CHRONICLE.length - 1 && (
-                    <span className="w-px flex-1 bg-[var(--bdr)]" />
-                  )}
-                </div>
-                <div className="pb-8">
-                  <div className="font-display font-bold text-[0.68rem] uppercase tracking-[0.14em] text-[var(--acc)]">
-                    {c.year}
-                  </div>
-                  <h3 className="font-display font-bold text-[1rem] text-[var(--t1)] mt-1">
-                    {c.title}
-                  </h3>
-                  <p className="text-[0.82rem] text-[var(--t2)] leading-relaxed mt-1.5 max-w-[560px]">
-                    {c.desc}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <blockquote className="mt-4 max-w-[760px] font-display font-bold text-[clamp(1.1rem,2.5vw,1.5rem)] leading-snug text-[var(--t1)]">
-            No rushed builds. No mystery lubricants. No shortcuts.
-            <span className="block mt-2 text-[0.8rem] font-normal text-[var(--t3)]">
-              Only work I&apos;d happily use myself.
-            </span>
-          </blockquote>
-        </div>
-      </section>
 
       <section className="svc-section" aria-labelledby="t-contact">
         <div className="wrap">

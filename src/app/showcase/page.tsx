@@ -60,8 +60,8 @@ export default async function WorkPage({
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <PageBanner
         eyebrow="Showcase"
-        title="Featured Work"
-        description="A showcase of keyboard builds, repairs, modifications and projects completed by TableTopLabs."
+        title="Featured Keyboard Builds, Mods & Repairs"
+        description="Explore completed keyboard builds, modifications, repairs, and custom projects completed by TableTopLabs for the keyboard community."
       />
 
       {/* ── Project showcase ─────────────────────────────────────────────── */}
@@ -94,7 +94,7 @@ export default async function WorkPage({
       <ReviewSection scope={{ type: "site" }} page={currentPage} />
 
       {/* ── CTA ──────────────────────────────────────────────────────────── */}
-      <BuildCta desc="Have a keyboard that needs work or want something custom? Real builds and repairs, handled the same way in the TableTopLabs workshop." />
+      <BuildCta />
     </main>
   );
 }

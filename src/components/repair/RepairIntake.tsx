@@ -19,6 +19,7 @@ import {
   CUSTOMER_IMAGE_ACCEPT,
   BOUNDED_IMAGE_TYPES_MESSAGE,
 } from "@/lib/images/validation";
+import { authClient } from "@/lib/auth/auth-client";
 
 export type AddressDTO = {
   id: string;
@@ -103,6 +104,7 @@ export function RepairIntake({
 }: {
   defaults: { name: string; email: string; phone: string };
 }) {
+  const { data: session } = authClient.useSession();
   const [state, formAction, pending] = useActionState<
     RepairRequestState,
     FormData
@@ -121,11 +123,10 @@ export function RepairIntake({
   const [condition, setCondition] = useState(CONDITIONS[0]);
   const [budget, setBudget] = useState("");
   const [description, setDescription] = useState("");
-  const defaultNameParts = defaults.name.trim().split(/\s+/);
-  const [firstName, setFirstName] = useState(defaultNameParts[0] ?? "");
-  const [lastName, setLastName] = useState(defaultNameParts.slice(1).join(" "));
-  const [email, setEmail] = useState(defaults.email);
-  const [phone, setPhone] = useState(defaults.phone);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [contactNotes, setContactNotes] = useState("");
   const [shippingMethod, setShippingMethod] = useState("SHIP");
   const [useAddressId, setUseAddressId] = useState("");
@@ -137,6 +138,25 @@ export function RepairIntake({
 
   const [gateError, setGateError] = useState<string | null>(null);
   const [photos, setPhotos] = useState<NewPhoto[]>([]);
+
+  // Load profile data from session (non-blocking, client-side)
+  useEffect(() => {
+    if (session?.user) {
+      const nameParts = (session.user.name ?? "").trim().split(/\s+/);
+      setFirstName(nameParts[0] ?? "");
+      setLastName(nameParts.slice(1).join(" ") ?? "");
+      setEmail(session.user.email ?? "");
+      // Phone is stored in profile, not in Better Auth session
+      // Could fetch from /api/account/profile if needed, but keeping simple
+    } else if (defaults) {
+      // Fallback to server-passed defaults for non-logged-in or SSR
+      const defaultNameParts = defaults.name.trim().split(/\s+/);
+      setFirstName(defaultNameParts[0] ?? "");
+      setLastName(defaultNameParts.slice(1).join(" ") ?? "");
+      setEmail(defaults.email);
+      setPhone(defaults.phone);
+    }
+  }, [session?.user, defaults]);
 
   // ponytail: saved addresses are only needed to prefill the shipping/pickup
   // section (a later, non-critical step), so fetch them client-side after

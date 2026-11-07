@@ -31,12 +31,12 @@ const META: Record<EmailType, { description: string; badge?: Badge }> = {
   },
   contactInquiry: {
     description:
-      "Internal notification to contact@keebforge.in when the contact form is submitted.",
+      "Internal notification to contact@tabletopslab.in when the contact form is submitted.",
     badge: "OPTIONAL",
   },
   repairRequest: {
     description:
-      "Internal notification to contact@keebforge.in when a custom work / repair request is submitted.",
+      "Internal notification to contact@tabletopslab.in when a custom work / repair request is submitted.",
     badge: "OPTIONAL",
   },
   shopOrderPaid: {

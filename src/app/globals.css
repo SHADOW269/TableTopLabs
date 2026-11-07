@@ -348,7 +348,19 @@ ul {
   letter-spacing: 0.04em;
   color: var(--t1);
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  gap: 8px;
+}
+
+.site-header .nav-logo-img {
+  width: 160px;
+  height: 53px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.site-header .nav-logo-text {
+  display: inline-block;
 }
 
 @media (max-width: 640px) {
@@ -16333,13 +16345,13 @@ body {
   z-index: 1;
   width: min(var(--max-w), 100% - 2 * var(--pad-x));
   margin-inline: auto;
-  padding-block: clamp(44px, 6vw, 76px) clamp(28px, 3vw, 40px);
+  padding-block: clamp(36px, 4.5vw, 56px) clamp(20px, 2.5vw, 32px);
 }
 .ttl-footer__top {
   display: grid;
   grid-template-columns: 1fr 1.5fr;
-  gap: clamp(30px, 5vw, 72px);
-  align-items: dott;
+  gap: clamp(24px, 4vw, 56px);
+  align-items: start;
 }
 .ttl-footer__wordmark {
   font-family: var(--ff-display);
@@ -16348,9 +16360,23 @@ body {
   letter-spacing: 0.02em;
   color: #F4F4F4;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 .ttl-footer__wordmark:hover {
   color: var(--m3-txt-2);
+}
+
+.ttl-footer__logo-img {
+  width: 320px;
+  height: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.ttl-footer__logo-text {
+  display: inline-block;
 }
 .ttl-footer__tagline {
   margin: 14px 0 0;
@@ -16396,8 +16422,8 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px 24px;
-  margin-top: clamp(36px, 5vw, 60px);
-  padding-top: clamp(20px, 2.6vw, 30px);
+  margin-top: clamp(28px, 4vw, 44px);
+  padding-top: clamp(16px, 2vw, 24px);
   border-top: 1px solid var(--m3-line);
 }
 .ttl-footer__copy,
@@ -23521,17 +23547,6 @@ body {
     min-height: 320px;
     padding: 32px;
   }
-
-  .cta-section--media .cta-bg-overlay {
-    background:
-      linear-gradient(
-        180deg,
-        rgba(0, 0, 0, 0.65) 0%,
-        rgba(0, 0, 0, 0.88) 55%,
-        rgba(0, 0, 0, 0.94) 100%
-      ),
-      linear-gradient(90deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.35));
-  }
 }
 
 @media (max-width: 640px) {
@@ -24018,8 +24033,119 @@ body {
   }
 }
 
+/* ==========================================================================
+   SHARED PAGE BANNER — unified hero used by Collection, Services, Showcase
+   Matches the Services (.ri-page .ri-hero-new) design exactly.
+   ========================================================================== */
+
+.ttl-page-banner {
+  position: relative;
+  padding: calc(var(--nav-h) + 30px) 0 24px;
+  overflow: hidden;
+}
+
+.ttl-page-banner::before {
+  content: "";
+  position: absolute;
+  top: var(--nav-h);
+  right: calc(
+    max(194px, (100% - 1180px) / 2 + 170px) - 152px
+  );
+  bottom: 0;
+  width: 900px;
+  background-image: url("/img/samplework-image.png");
+  background-position: center 34%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ttl-page-banner::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 120px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(20, 20, 20, 0.45) 50%,
+    #141414 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ttl-page-banner__inner {
+  position: relative;
+  z-index: 2;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 48px);
+}
+
+.ttl-page-banner__copy {
+  position: relative;
+  z-index: 2;
+  max-width: 640px;
+}
+
+.ttl-page-banner__eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--ff-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--acc);
+}
+
+.ttl-page-banner__title {
+  margin: 0 0 12px;
+  font-family: var(--ff-display);
+  font-size: clamp(2.1rem, 4.2vw, 3.25rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  color: var(--t1);
+}
+
+.ttl-page-banner__desc {
+  max-width: 530px;
+  margin: 0;
+  color: var(--t2);
+  font-size: clamp(0.93rem, 1.05vw, 1.02rem);
+  line-height: 1.6;
+}
+
+/* Responsive */
+@media (max-width: 1023px) {
+  .ttl-page-banner::before {
+    right: 0;
+    width: 68%;
+  }
+}
+
+@media (max-width: 640px) {
+  .ttl-page-banner {
+    padding-top: calc(var(--nav-h) + 26px);
+    padding-bottom: 20px;
+  }
+
+  .ttl-page-banner::before {
+    display: none;
+  }
+
+  .ttl-page-banner__title {
+    font-size: clamp(2rem, 9vw, 2.6rem);
+  }
+}
+
 /* Workshop CTA — keep the background artwork unobscured. */
-.ri-page--v2 .cta-section--media .cta-bg-overlay {
+.cta-section--media .cta-bg-overlay {
   background: transparent;
 }
 

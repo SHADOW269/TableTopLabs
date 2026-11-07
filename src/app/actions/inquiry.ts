@@ -134,7 +134,7 @@ export async function sendInquiry(
     if (!cloudinaryConfigured()) {
       return {
         error:
-          "Photo upload is temporarily unavailable. You can still send the inquiry without photos, or email the photos to contact@keebforge.in.",
+          "Photo upload is temporarily unavailable. You can still send the inquiry without photos, or email the photos to contact@tabletopslab.in.",
       };
     }
     for (const img of images) {
@@ -164,12 +164,12 @@ export async function sendInquiry(
       );
       return {
         error:
-          "The inquiry could not be sent right now. Please email contact@keebforge.in directly.",
+          "The inquiry could not be sent right now. Please email contact@tabletopslab.in directly.",
       };
     }
     // Test/suppression policy: redirect or skip. Suppression is intentional, so
     // the inquiry still reports success rather than a misleading send failure.
-    const plan = resolveOutboundRecipient("contact@keebforge.in");
+    const plan = resolveOutboundRecipient("contact@tabletopslab.in");
     if (plan.action === "skip") {
       logSuppressedDelivery(plan.reason);
       return { ok: true };
@@ -236,14 +236,14 @@ export async function sendInquiry(
       );
       return {
         error:
-          "The inquiry could not be sent right now. Please email contact@keebforge.in directly.",
+          "The inquiry could not be sent right now. Please email contact@tabletopslab.in directly.",
       };
     }
   } catch (e) {
     console.error("Resend error (inquiry):", resendErrorDiagnostic(e));
     return {
       error:
-        "The inquiry could not be sent right now. Please email contact@keebforge.in directly.",
+        "The inquiry could not be sent right now. Please email contact@tabletopslab.in directly.",
     };
   }
 

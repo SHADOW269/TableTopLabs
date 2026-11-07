@@ -19,18 +19,18 @@ export default async function ShopPage({ searchParams }: Props) {
   const sp = await searchParams;
 
   return (
-    <main className="shop-page ri-page">
+    <main className="work-page ri-page">
       <PageBanner
         eyebrow="Collection"
         title="Keyboards, Parts & Accessories"
-        description="Explore our collection — Made to Order (custom products built specifically for you), Brand New (new products from TableTopLabs) and Clearance (discounted, open-box, used, or older-stock items)."
+        description="Explore our collection of custom keyboards, new products, parts, and accessories, including made-to-order builds and clearance items."
       />
       <section className="svc-section">
         <div className="wrap">
           <ShopCatalog searchParams={sp} showAll />
         </div>
       </section>
-      <BuildCta primaryHref="/services" />
+      <BuildCta />
     </main>
   );
 }

@@ -8,12 +8,14 @@ export function PageBanner({
   description: string;
 }) {
   return (
-    <section className="ri-hero-new">
-      <div className="work-wrap-new">
-        <div className="ri-hero-copy">
-          <p className="ri2-eyebrow">{eyebrow}</p>
-          <h1 className="ri-hero-title-new">{title}</h1>
-          <p className="ri-hero-desc-new">{description}</p>
+    <section className="ttl-page-banner" aria-labelledby="ttl-banner-title">
+      <div className="ttl-page-banner__inner">
+        <div className="ttl-page-banner__copy">
+          <p className="ttl-page-banner__eyebrow">{eyebrow}</p>
+          <h1 id="ttl-banner-title" className="ttl-page-banner__title">
+            {title}
+          </h1>
+          <p className="ttl-page-banner__desc">{description}</p>
         </div>
       </div>
     </section>

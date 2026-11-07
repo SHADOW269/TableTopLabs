@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 /* Central social config — only the owner's real profiles. */
 const SOCIALS = [
@@ -78,7 +79,13 @@ export function SiteFooter() {
         <div className="ttl-footer__top">
           <div className="ttl-footer__brand">
             <Link href="/" className="ttl-footer__wordmark" aria-label="TableTopLabs home">
-              TableTopLabs
+              <Image
+                src="/img/favicon.png"
+                alt="TableTopLabs"
+                width={320}
+                height={106}
+                className="ttl-footer__logo-img"
+              />
             </Link>
             <p className="ttl-footer__tagline">
               A considered storefront for mechanical keyboards, parts and

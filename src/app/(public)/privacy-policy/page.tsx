@@ -76,8 +76,8 @@ export default function PrivacyPolicyPage() {
               title="Questions About Your Data?"
               desc="Reach out any time — email replies are fast."
             />
-            <a href="mailto:contact@keebforge.in" className="btn-prime">
-              Email Us: contact@keebforge.in
+            <a href="mailto:contact@tabletopslab.in" className="btn-prime">
+              Email Us: contact@tabletopslab.in
             </a>
           </div>
         </div>

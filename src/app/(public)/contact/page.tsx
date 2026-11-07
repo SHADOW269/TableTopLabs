@@ -21,9 +21,9 @@ const CHANNELS = [
   {
     icon: "✉️",
     title: "Email",
-    desc: "Repair inquiries can be sent to contact@keebforge.in via the form below.",
-    href: "mailto:contact@keebforge.in",
-    label: "contact@keebforge.in",
+    desc: "Repair inquiries can be sent to contact@tabletopslab.in via the form below.",
+    href: "mailto:contact@tabletopslab.in",
+    label: "contact@tabletopslab.in",
   },
 ];
 

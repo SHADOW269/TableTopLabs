@@ -3,6 +3,7 @@
 import { authClient } from "@/lib/auth/auth-client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import CartIcon from "@/components/icons/cart-icon";
@@ -146,10 +147,13 @@ export function SiteHeader() {
             </svg>
           </button>
           <Link href="/" className="nav-logo" aria-label="TableTopLabs Home">
-            <span className="logo-mark" aria-hidden="true">
-              TL
-            </span>
-            <span>TableTopLabs</span>
+            <Image
+              src="/img/favicon.png"
+              alt="TableTopLabs"
+              width={160}
+              height={53}
+              className="nav-logo-img"
+            />
           </Link>
           <div className="nav-links">
             {LINKS.map((l) => {

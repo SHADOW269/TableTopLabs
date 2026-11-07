@@ -338,7 +338,7 @@ export async function submitRepairRequest(
     for (const u of uploaded) await deleteImage(u.publicId).catch(() => {});
     return {
       error:
-        "The request could not be saved right now. Please email contact@keebforge.in directly.",
+        "The request could not be saved right now. Please email contact@tabletopslab.in directly.",
     };
   }
 
@@ -352,7 +352,7 @@ export async function submitRepairRequest(
     }
     // Test/suppression policy: redirect or skip. The request is already
     // persisted, and suppression is intentional, so it still reports success.
-    const plan = resolveOutboundRecipient("contact@keebforge.in");
+    const plan = resolveOutboundRecipient("contact@tabletopslab.in");
     if (plan.action === "skip") {
       logSuppressedDelivery(plan.reason);
       return { ok: true, orderNumber };

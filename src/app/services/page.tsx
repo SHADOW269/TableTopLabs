@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { buildMetadata, JsonLd, SITE_URL } from "@/lib/seo";
-import { getCurrentAuth } from "@/lib/auth/session";
 import { RepairIntake } from "@/components/repair/RepairIntake";
 import { BuildCta } from "@/components/ui/BuildCta";
 import { PageBanner } from "@/components/ui/PageBanner";
@@ -30,24 +29,22 @@ const WORKSHOP_SERVICE_JSONLD = {
   areaServed: { "@type": "Country", name: "India" },
 };
 
-export default async function RepairPage() {
-  const { profile } = await getCurrentAuth();
-
+export default function RepairPage() {
   return (
-    <main className="work-page ri-page ri-page--v2">
+    <main className="work-page ri-page">
       <JsonLd data={WORKSHOP_SERVICE_JSONLD} />
 
       <PageBanner
         eyebrow="Services"
-        title="Keyboard Services"
-        description="Custom builds, repairs, modifications, and technical services for keyboards and desk setups — tell us what you're working on and we'll help you figure out the next step."
+        title="Custom Keyboard Services & Repairs"
+        description="Get help with custom builds, repairs, modifications, and technical work for keyboards and desk setups, tailored to your needs."
       />
 
       <RepairIntake
         defaults={{
-          name: profile?.name ?? "",
-          email: profile?.email ?? "",
-          phone: profile?.phone ?? "",
+          name: "",
+          email: "",
+          phone: "",
         }}
       />
 
