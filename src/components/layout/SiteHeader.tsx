@@ -4,7 +4,7 @@ import { authClient } from "@/lib/auth/auth-client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import CartIcon from "@/components/icons/cart-icon";
 import type { AnimatedIconHandle } from "@/components/icons/types";
 import UserPlusIcon from "@/components/icons/user-plus-icon";
@@ -14,28 +14,11 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+// Main navigation links
 const LINKS = [
-  { href: "/shop", label: "Shop" },
-  { href: "/workshop", label: "Workshop" },
-  { href: "/work", label: "Portfolio" },
-];
-
-const SHOP_LINKS = [
-  {
-    href: "/shop/custom",
-    label: "Made to Order",
-    desc: "Custom products built specifically for you.",
-  },
-  {
-    href: "/shop/products",
-    label: "Brand New",
-    desc: "New products available from TableTopLabs.",
-  },
-  {
-    href: "/shop/clearance",
-    label: "Clearance",
-    desc: "Discounted, open-box & older-stock items.",
-  },
+  { href: "/collection", label: "Collection" },
+  { href: "/services", label: "Services" },
+  { href: "/showcase", label: "Showcase" },
 ];
 
 function getInitials(
@@ -59,10 +42,8 @@ export function SiteHeader() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [shopOpen, setShopOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const profileRef = useRef<HTMLDivElement>(null);
-  const shopRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const { data: session } = authClient.useSession();
 
@@ -97,21 +78,17 @@ export function SiteHeader() {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (
-        profileRef.current &&
-        !profileRef.current.contains(e.target as Node)
-      ) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileOpen(false);
-      }
-      if (shopRef.current && !shopRef.current.contains(e.target as Node)) {
-        setShopOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const closeMenu = () => setMenuOpen(false);
+  const closeMenu = () => {
+    setMenuOpen(false);
+  };
 
   const handleSignOut = async () => {
     await authClient.signOut();
@@ -175,97 +152,24 @@ export function SiteHeader() {
             <span>TableTopLabs</span>
           </Link>
           <div className="nav-links">
-            {LINKS.map((l) =>
-              l.href === "/shop" ? (
-                <div
-                  key={l.href}
-                  className="nav-shop"
-                  ref={shopRef}
-                  onMouseEnter={() => setShopOpen(true)}
-                  onMouseLeave={() => setShopOpen(false)}
-                >
-                  <Link
-                    href="/shop"
-                    className={`nav-link nav-shop-trigger${isActive(pathname, "/shop") ? " active" : ""}`}
-                    aria-current={
-                      isActive(pathname, "/shop") ? "page" : undefined
-                    }
-                  >
-                    {l.label}
-                  </Link>
-                  <button
-                    type="button"
-                    className="nav-shop-arrow"
-                    aria-label="Open shop menu"
-                    aria-expanded={shopOpen}
-                    aria-haspopup="true"
-                    onClick={() => setShopOpen((v) => !v)}
-                  >
-                    <svg
-                      className={`nav-shop-chev${shopOpen ? " open" : ""}`}
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M6 9l6 6 6-6"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                  {shopOpen && (
-                    <div className="nav-shop-menu" role="menu">
-                      <Link
-                        href="/shop"
-                        className="nav-shop-item"
-                        role="menuitem"
-                        onClick={() => setShopOpen(false)}
-                      >
-                        <span className="nav-shop-item-label">
-                          All Products
-                        </span>
-                        <span className="nav-shop-item-desc">
-                          Everything in the shop
-                        </span>
-                      </Link>
-                      {SHOP_LINKS.map((s) => (
-                        <Link
-                          key={s.href}
-                          href={s.href}
-                          className="nav-shop-item"
-                          role="menuitem"
-                          aria-current={
-                            isActive(pathname, s.href) ? "page" : undefined
-                          }
-                          onClick={() => setShopOpen(false)}
-                        >
-                          <span className="nav-shop-item-label">{s.label}</span>
-                          <span className="nav-shop-item-desc">{s.desc}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
+            {LINKS.map((l) => {
+              const isActiveLink = isActive(pathname, l.href);
+              return (
                 <Link
                   key={l.href}
                   href={l.href}
-                  className={`nav-link${isActive(pathname, l.href) ? " active" : ""}`}
-                  aria-current={isActive(pathname, l.href) ? "page" : undefined}
+                  className={`nav-link${isActiveLink ? " active" : ""}`}
+                  aria-current={isActiveLink ? "page" : undefined}
+                  onClick={closeMenu}
                 >
                   {l.label}
                 </Link>
-              ),
-            )}
+              );
+            })}
           </div>
           <div className="nav-actions">
             <Link
-              href="/shop/cart"
+              href="/collection/cart"
               className="nav-icon nav-cart"
               onMouseEnter={() => cartIconRef.current?.startAnimation()}
               onMouseLeave={() => cartIconRef.current?.stopAnimation()}
@@ -416,29 +320,20 @@ export function SiteHeader() {
       </nav>
       {menuOpen && (
         <div className="mobile-menu open">
-          {LINKS.map((l) => (
-            <Fragment key={l.href}>
+          {LINKS.map((l) => {
+            const isActiveLink = isActive(pathname, l.href);
+            return (
               <Link
+                key={l.href}
                 href={l.href}
-                className={isActive(pathname, l.href) ? "active" : undefined}
-                aria-current={isActive(pathname, l.href) ? "page" : undefined}
+                className={`mobile-section-link${isActiveLink ? " active" : ""}`}
+                aria-current={isActiveLink ? "page" : undefined}
                 onClick={closeMenu}
               >
                 {l.label}
               </Link>
-              {l.href === "/shop" &&
-                SHOP_LINKS.map((s) => (
-                  <Link
-                    key={s.href}
-                    href={s.href}
-                    className="mobile-menu-sub"
-                    onClick={closeMenu}
-                  >
-                    {s.label}
-                  </Link>
-                ))}
-            </Fragment>
-          ))}
+            );
+          })}
           {!session && (
             <Link
               href="/auth/login"

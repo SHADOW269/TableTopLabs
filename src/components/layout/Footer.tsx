@@ -44,23 +44,35 @@ const SOCIAL_ICONS: Record<(typeof SOCIALS)[number]["label"], ReactNode> = {
 /* Only routes that actually exist — no invented URLs. */
 const GROUPS: { title: string; links: { href: string; label: string }[] }[] = [
   {
-    title: "Explore",
+    title: "Collection",
     links: [
-      { href: "/shop", label: "All Products" },
-      { href: "/shop/custom", label: "Made to Order" },
-      { href: "/shop/products", label: "Brand New" },
-      { href: "/shop/clearance", label: "Clearance" },
-      { href: "/about", label: "About" },
+      { href: "/collection", label: "Browse Collection" },
+      { href: "/collection/custom", label: "Made to Order" },
+      { href: "/collection/products", label: "New Products" },
+      { href: "/collection/clearance", label: "Clearance" },
     ],
   },
   {
-    title: "Support",
+    title: "Services",
     links: [
+      { href: "/services", label: "Keyboard Services" },
       { href: "/track-order", label: "Track Order" },
       { href: "/shipping-information", label: "Shipping" },
       { href: "/returns-refunds", label: "Returns & Refunds" },
+    ],
+  },
+  {
+    title: "Showcase",
+    links: [
+      { href: "/showcase", label: "Featured Work" },
       { href: "/contact", label: "Contact" },
       { href: "/faq", label: "FAQ" },
+    ],
+  },
+  {
+    title: "About",
+    links: [
+      { href: "/about", label: "About TableTopLabs" },
     ],
   },
   {

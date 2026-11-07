@@ -44,7 +44,7 @@ export default async function AdminWorkPage() {
             letterSpacing: "-0.02em",
           }}
         >
-          Work / Portfolio{" "}
+          Showcase{" "}
           <span className="muted num">({projects.length})</span>
         </h1>
         <div className="admin-actions" style={{ margin: 0 }}>

@@ -532,7 +532,7 @@ export async function saveProduct(
 
     revalidatePath("/admin/products");
     revalidatePath("/admin/products/inventory");
-    revalidatePath("/shop");
+    revalidatePath("/collection");
 
     // Data-cache: the whole products slice (listings + detail + related + home).
     invalidateProducts();
@@ -583,7 +583,7 @@ export async function setProductStatus(
     data: { status, active: status !== "DRAFT" && status !== "ARCHIVED" },
   });
   revalidatePath("/admin/products");
-  revalidatePath("/shop");
+  revalidatePath("/collection");
   invalidateProducts();
   return { ok: true };
 }
@@ -606,7 +606,7 @@ export async function deleteProduct(
     if (img.publicId) await deleteImage(img.publicId).catch(() => {});
   }
   revalidatePath("/admin/products");
-  revalidatePath("/shop");
+  revalidatePath("/collection");
   invalidateProducts();
   return { ok: true };
 }
@@ -816,7 +816,7 @@ export async function saveBrand(
       },
     });
     revalidatePath("/admin/settings/brands");
-    revalidatePath("/shop");
+    revalidatePath("/collection");
     invalidateProducts();
     invalidateBrands();
     return { ok: true, id: brand.id };

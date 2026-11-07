@@ -139,7 +139,7 @@ export default function MaintenancePage() {
                 transition: "box-shadow 0.2s",
               }}
             >
-              Visit Shop <span style={{ marginLeft: 2 }}>→</span>
+              Visit Collection <span style={{ marginLeft: 2 }}>→</span>
             </Link>
             <Link
               href="https://shop.keebforge.in/contact/"

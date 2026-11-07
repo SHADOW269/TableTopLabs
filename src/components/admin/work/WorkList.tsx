@@ -70,7 +70,7 @@ export function WorkList({ rows }: { rows: Row[] }) {
                     )}
                   </div>
                   <div className="muted" style={{ fontSize: "0.75rem" }}>
-                    /work/{r.slug} · order {r.sortOrder}
+                    /showcase/{r.slug} · order {r.sortOrder}
                   </div>
                 </td>
                 <td className="muted">{label(r.category)}</td>

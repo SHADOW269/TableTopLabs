@@ -11,7 +11,7 @@ import {
 export const metadata: Metadata = buildMetadata({
   title: "Your Cart | TableTopLabs",
   description: "Review your TableTopLabs cart before checkout.",
-  path: "/shop/cart",
+  path: "/collection/cart",
   noIndex: true,
 });
 
@@ -71,8 +71,8 @@ export default async function ShopCartPage() {
           {/* ── Header row ── */}
           <div className="cart-header">
             <h1 className="sec-title mb-0">Your Cart</h1>
-            <Link href="/shop" className="cart-continue-link">
-              Continue Shopping <span aria-hidden="true">&rarr;</span>
+            <Link href="/collection" className="cart-continue-link">
+              Continue Collection <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
           <p className="sec-desc">
@@ -88,8 +88,8 @@ export default async function ShopCartPage() {
             /* ── Empty state ── */
             <div className="cart-empty">
               <h2>Your cart is currently empty.</h2>
-              <Link href="/shop" className="btn-prime">
-                Continue Shopping <span aria-hidden="true">&rarr;</span>
+              <Link href="/collection" className="btn-prime">
+                Continue Collection <span aria-hidden="true">&rarr;</span>
               </Link>
             </div>
           ) : (

@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { HomeCategory } from "@/lib/home";
 
 const ROUTES = [
-  { href: "/shop/custom", label: "Made to Order" },
-  { href: "/shop/products", label: "Brand New" },
-  { href: "/shop/clearance", label: "Clearance" },
+  { href: "/collection/custom", label: "Made to Order" },
+  { href: "/collection/products", label: "Brand New" },
+  { href: "/collection/clearance", label: "Clearance" },
 ] as const;
 
 /** Categories presented as a typographic index keyed by number. */
@@ -24,7 +24,7 @@ export function LabCollections({ categories }: { categories: HomeCategory[] }) {
             Collections
           </p>
           <h2 id="ttl-sectors-title" className="ttl-head__title">
-            Shop by category.
+            Browse by category.
           </h2>
         </div>
         <p className="ttl-head__sub">
@@ -36,7 +36,7 @@ export function LabCollections({ categories }: { categories: HomeCategory[] }) {
       <ul className="ttl-sectors__rail">
         {categories.map((cat, i) => (
           <li key={cat.id} className="ttl-sector">
-            <Link href={`/shop/${cat.slug}`} className="ttl-sector__link">
+            <Link href={`/collection/${cat.slug}`} className="ttl-sector__link">
               <span className="ttl-sector__code" aria-hidden="true">
                 {String(i + 1).padStart(2, "0")}
               </span>
@@ -53,7 +53,7 @@ export function LabCollections({ categories }: { categories: HomeCategory[] }) {
         ))}
       </ul>
 
-      <nav className="ttl-routes" aria-label="Shop routes">
+      <nav className="ttl-routes" aria-label="Collection routes">
         <span className="ttl-routes__label">Quick routes</span>
         <div className="ttl-routes__list">
           {ROUTES.map((r) => (

@@ -110,7 +110,7 @@ async function siteReviews(page: number) {
     writeLabel: "Write a Review",
     emptySub:
       "Share your experience with TableTopLabs and help others choose with confidence.",
-    basePath: "/work",
+    basePath: "/showcase",
   };
 }
 

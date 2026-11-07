@@ -199,7 +199,7 @@ export function WorkForm({ project }: { project?: WorkProjectProp }) {
         <h3 style={{ marginBottom: 0 }}>
           {project ? `Edit project: ${project.title}` : "New project"}
         </h3>
-        {project && <Link href={`/work/${project.slug}`}>View live →</Link>}
+        {project && <Link href={`/showcase/${project.slug}`}>View live →</Link>}
       </div>
 
       <div

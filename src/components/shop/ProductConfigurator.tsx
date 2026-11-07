@@ -108,7 +108,7 @@ export function ProductConfigurator({
   };
 
   useEffect(() => {
-    if (state?.ok && buyNow) router.push("/shop/checkout");
+    if (state?.ok && buyNow) router.push("/collection/checkout");
   }, [state, buyNow, router]);
 
   useEffect(() => {

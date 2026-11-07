@@ -21,13 +21,13 @@ export async function generateMetadata({
     return buildMetadata({
       title: "Project not found | TableTopLabs",
       description: "",
-      path: "/work",
+      path: "/showcase",
       noIndex: true,
     });
   return buildMetadata({
     title: `${p.title} | TableTopLabs`,
     description: p.description,
-    path: `/work/${p.slug}`,
+    path: `/showcase/${p.slug}`,
   });
 }
 
@@ -55,7 +55,7 @@ export default async function WorkDetailPage({
         <div className="wrap">
           <Breadcrumbs
             className="breadcrumbs-lime"
-            items={[{ name: "Work", href: "/work" }, { name: project.title }]}
+            items={[{ name: "Showcase", href: "/showcase" }, { name: project.title }]}
           />
 
           <div className="mt-10 grid items-center gap-10 md:mt-14 md:grid-cols-[45%_55%] md:gap-12">
@@ -114,10 +114,10 @@ export default async function WorkDetailPage({
               Have an idea in mind? Let&apos;s turn it into something real.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link href="/shop/checkout" className="btn-prime">
+              <Link href="/collection/checkout" className="btn-prime">
                 Start a Project Like This
               </Link>
-              <Link href="/work" className="btn-ghost">
+              <Link href="/showcase" className="btn-ghost">
                 ← All Work
               </Link>
             </div>
@@ -128,8 +128,8 @@ export default async function WorkDetailPage({
       {/* ── Breadcrumb markup ────────────────────────────────────────────── */}
       <JsonLd
         data={breadcrumbJsonLd([
-          { name: "Work", path: "/work" },
-          { name: project.title, path: `/work/${project.slug}` },
+          { name: "Showcase", path: "/showcase" },
+          { name: project.title, path: `/showcase/${project.slug}` },
         ])}
       />
     </main>

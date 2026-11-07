@@ -2,7 +2,7 @@
 
 /**
  * Step/section card header: `panel-tag` + optional `panel-title` + children.
- * Shared by /workshop (`panel ri-step`, `panel ri-review`, `panel ri-summary`)
+ * Shared by /services (`panel ri-step`, `panel ri-review`, `panel ri-summary`)
  * and /mods (configurator panels + order preview). `className` carries the
  * host's panel shape.
  */

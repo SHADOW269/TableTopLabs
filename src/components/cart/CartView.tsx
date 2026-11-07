@@ -129,8 +129,8 @@ export function CartView({ rows }: { rows: CartRow[] }) {
     return (
       <div className="cart-empty">
         <h2>Your cart is currently empty.</h2>
-        <Link href="/shop" className="btn-prime">
-          Continue Shopping <span aria-hidden="true">&rarr;</span>
+        <Link href="/collection" className="btn-prime">
+          Continue Collection <span aria-hidden="true">&rarr;</span>
         </Link>
       </div>
     );
@@ -272,10 +272,10 @@ export function CartView({ rows }: { rows: CartRow[] }) {
           * Final total including shipping will be calculated at checkout.
         </p>
 
-        <Link href="/shop/checkout" className="btn-prime w-full justify-center">
+        <Link href="/collection/checkout" className="btn-prime w-full justify-center">
           Continue to Checkout <span aria-hidden="true">&rarr;</span>
         </Link>
-        <Link href="/shop" className="btn-ghost w-full justify-center mt-2">
+        <Link href="/collection" className="btn-ghost w-full justify-center mt-2">
           Keep Shopping
         </Link>
       </aside>

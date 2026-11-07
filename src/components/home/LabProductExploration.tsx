@@ -25,7 +25,7 @@ export function LabProductExploration({
             Browse the bench.
           </h2>
         </div>
-        <Link href="/shop" className="ttl-viewall">
+        <Link href="/collection" className="ttl-viewall">
           View all products <span aria-hidden="true">→</span>
         </Link>
       </header>

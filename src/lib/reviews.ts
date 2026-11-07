@@ -111,7 +111,7 @@ export const getProductReviews = defineCached(
   { tags: [TAG.reviews], revalidate: TTL.reviews, keys: ["product-reviews"] },
 );
 
-/** Site-wide customer feed for /work: APPROVED product + general reviews. */
+/** Site-wide customer feed for /showcase: APPROVED product + general reviews. */
 export const getPublicReviews = defineCached(
   (opts: { page?: number; pageSize?: number } = {}) =>
     reviewsPage(

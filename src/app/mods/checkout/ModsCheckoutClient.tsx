@@ -73,9 +73,9 @@ export default function ModsCheckoutClient({
                 type="button"
                 className="btn-prime"
                 style={{ width: "auto", paddingInline: 24, marginTop: 16 }}
-                onClick={() => router.push("/shop")}
+                onClick={() => router.push("/collection")}
               >
-                Go to Shop
+                Browse Collection
               </button>
             </div>
           </div>

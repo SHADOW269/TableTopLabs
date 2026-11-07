@@ -104,7 +104,7 @@ export async function getCartWithItems() {
 }
 
 /**
- * Lean cart read for the /shop/cart page render. Unlike getCartWithItems, it:
+ * Lean cart read for the /collection/cart page render. Unlike getCartWithItems, it:
  *  - uses narrow `select`s (no full Product/Brand/Variant rows, no costPrice,
  *    descriptions, seo, specs, etc. — those are sensitive/unneeded here),
  *  - omits serviceItem entirely (the cart page never renders it),

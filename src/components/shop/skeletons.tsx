@@ -216,7 +216,7 @@ export function ModsLoadingSkeleton() {
   );
 }
 
-/** Route-loading skeleton for /work (portfolio grid). */
+/** Route-loading skeleton for /showcase (portfolio grid). */
 export function WorkLoadingSkeleton() {
   return (
     <main className="work-page">

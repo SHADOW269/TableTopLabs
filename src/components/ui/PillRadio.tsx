@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Radio pill group + pill option. Shared by /workshop (device type, shipping
+ * Radio pill group + pill option. Shared by /services (device type, shipping
  * method) and /mods (layout, keycaps, ship method, delivery speed). Value,
  * checked state and onChange come from the host; business rules stay there.
  */

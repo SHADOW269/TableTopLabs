@@ -5,19 +5,19 @@ import { buildMetadata } from "@/lib/seo";
 import { SECTION_LABELS } from "@/lib/catalog/shop";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Custom Orders — Shop | TableTopLabs",
+  title: "New Products — Collection | TableTopLabs",
   description:
-    "Made-to-order keyboards, switches and custom work, built specifically for you.",
-  path: "/shop/custom",
+    "Brand-new keyboards, switches, keycaps and accessories currently in stock.",
+  path: "/collection/products",
 });
 
 type Props = {
   searchParams: Promise<{ sort?: string; page?: string }>;
 };
 
-export default async function CustomShopPage({ searchParams }: Props) {
+export default async function NewProductsPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const meta = SECTION_LABELS.CUSTOM;
+  const meta = SECTION_LABELS.NEW;
 
   return (
     <main className="shop-page">
@@ -25,7 +25,7 @@ export default async function CustomShopPage({ searchParams }: Props) {
         <div className="wrap">
           <p className="ttl-eyebrow">
             <span className="ttl-eyebrow__mark" aria-hidden="true" />
-            Shop
+            Collection
           </p>
           <h1 className="sec-title">{meta.title}</h1>
           <p className="sec-desc shop-desc">{meta.blurb}</p>
@@ -33,10 +33,10 @@ export default async function CustomShopPage({ searchParams }: Props) {
       </section>
       <section className="svc-section">
         <div className="wrap">
-          <ShopCatalog section="custom" searchParams={sp} />
+          <ShopCatalog section="new" searchParams={sp} />
         </div>
       </section>
-      <BuildCta primaryHref="/workshop" />
+      <BuildCta primaryHref="/services" />
     </main>
   );
 }

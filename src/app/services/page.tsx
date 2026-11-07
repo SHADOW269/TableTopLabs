@@ -5,10 +5,10 @@ import { RepairIntake } from "@/components/repair/RepairIntake";
 import { BuildCta } from "@/components/ui/BuildCta";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Keyboard Workshop — Repairs, Builds & Restoration | TableTopLabs",
+  title: "Keyboard Services — Repairs, Builds & Customization | TableTopLabs",
   description:
-    "Repairs, custom work, builds, restoration, and technical services for keyboards and desk setups. Tell us what you're working on and get a quote after inspection.",
-  path: "/workshop",
+    "Custom builds, repairs, modifications, and technical services for keyboards and desk setups. Tell us what you're working on and get a quote after inspection.",
+  path: "/services",
 });
 
 // Factual Workshop service markup (name, URL, India coverage only — no
@@ -16,12 +16,12 @@ export const metadata: Metadata = buildMetadata({
 // Organization node via @id to avoid a duplicate entity.
 const WORKSHOP_SERVICE_JSONLD = {
   "@type": "Service",
-  "@id": `${SITE_URL}/workshop#service`,
+  "@id": `${SITE_URL}/services#service`,
   serviceType: "Keyboard and mouse repair and customization services",
-  name: "TableTopLabs Keyboard Workshop",
+  name: "TableTopLabs Keyboard Services",
   description:
-    "Repairs, custom work, builds, restoration, and technical services for keyboards and desk setups. Quote given after inspection.",
-  url: `${SITE_URL}/workshop`,
+    "Custom builds, repairs, modifications, and technical services for keyboards and desk setups. Quote given after inspection.",
+  url: `${SITE_URL}/services`,
   provider: {
     "@type": "Organization",
     "@id": `${SITE_URL}/#organization`,
@@ -39,10 +39,10 @@ export default async function RepairPage() {
       <section className="ri-hero-new">
         <div className="work-wrap-new">
           <div className="ri-hero-copy">
-            <p className="ri2-eyebrow">Workshop</p>
-            <h1 className="ri-hero-title-new">Keyboard Workshop</h1>
+            <p className="ri2-eyebrow">Services</p>
+            <h1 className="ri-hero-title-new">Keyboard Services</h1>
             <p className="ri-hero-desc-new">
-              Repairs, custom work, builds, restoration, and technical services
+              Custom builds, repairs, modifications, and technical services
               for keyboards and desk setups — tell us what you&apos;re working
               on and we&apos;ll help you figure out the next step.
             </p>

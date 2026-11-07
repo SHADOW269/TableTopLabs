@@ -12,7 +12,7 @@ const SHOP_URL = "https://shop.keebforge.in/";
  * padding it reserves are both in the first HTML response. It used to be a
  * client component that waited on `/api/settings/public`, so the banner
  * mounted after hydration and pushed the whole page down by `--notice-h`
- * mid-load (CLS 0.0753 on mobile /work). One cached read replaces that
+ * mid-load (CLS 0.0753 on mobile /showcase). One cached read replaces that
  * client round-trip — no second request. Only an explicit `true` shows the
  * banner, so a failed or unread setting keeps it hidden, and the admin toggle
  * is unchanged: `invalidateSiteSettings()` purges this same cache entry.

@@ -27,10 +27,10 @@ export function LabHero({ product }: { product: ShopProduct | null }) {
           accessories — chosen for how they work, not how they look on a shelf.
         </p>
         <div className="ttl-hero__cta">
-          <Link href="/shop" className="ttl-btn ttl-btn--primary">
-            Shop the collection <span aria-hidden="true">→</span>
+          <Link href="/collection" className="ttl-btn ttl-btn--primary">
+            Browse Collection <span aria-hidden="true">→</span>
           </Link>
-          <Link href="/shop/custom" className="ttl-btn ttl-btn--ghost">
+          <Link href="/collection/custom" className="ttl-btn ttl-btn--ghost">
             Made to order
           </Link>
         </div>

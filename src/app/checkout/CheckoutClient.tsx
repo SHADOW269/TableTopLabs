@@ -883,10 +883,10 @@ void clearServiceCartItem();
               )}
 
               <Link
-                href="/shop"
+                href="/collection"
                 className="btn-ghost w-full mt-4 justify-center"
               >
-                ← Back to Shop
+                ← Back to Collection
               </Link>
             </aside>
           </div>
@@ -1384,18 +1384,18 @@ export function ProductCheckout({
                 Looks like you haven&apos;t added anything yet.
               </p>
               <Link
-                href="/shop"
+                href="/collection"
                 className="btn-prime"
                 style={{ width: "auto", paddingInline: 24, marginTop: 16 }}
               >
-                Browse Shop
+                Browse Collection
               </Link>
             </div>
             <div className="pb-8 text-center mt-6">
               <button
                 type="button"
                 className="btn-ghost"
-                onClick={() => router.push("/workshop")}
+                onClick={() => router.push("/services")}
               >
                 Looking for a service? Visit the workshop →
               </button>
@@ -1768,7 +1768,7 @@ export function ProductCheckout({
                 </p>
               )}
               <Link
-                href="/shop/cart"
+                href="/collection/cart"
                 className="btn-ghost w-full mt-2 justify-center"
               >
                 Back to Cart
@@ -1781,7 +1781,7 @@ export function ProductCheckout({
         <button
           type="button"
           className="btn-ghost"
-          onClick={() => router.push("/workshop")}
+          onClick={() => router.push("/services")}
         >
           Looking for a service? Visit the workshop →
         </button>

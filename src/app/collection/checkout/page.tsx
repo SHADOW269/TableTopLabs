@@ -8,7 +8,7 @@ export const metadata: Metadata = buildMetadata({
   title: "Checkout | TableTopLabs",
   description:
     "Review your cart, enter delivery details and pay securely via Razorpay.",
-  path: "/shop/checkout",
+  path: "/collection/checkout",
   noIndex: true,
 });
 

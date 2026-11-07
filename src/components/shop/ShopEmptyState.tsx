@@ -16,7 +16,7 @@ export type EmptyStateConfig = {
 export const DEFAULT_EMPTY_STATE: EmptyStateConfig = {
   title: "Nothing Here Yet",
   actions: [
-    { label: "Browse All Products →", href: "/shop", variant: "ghost" },
+    { label: "Browse All Products →", href: "/collection", variant: "ghost" },
   ],
 };
 

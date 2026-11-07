@@ -31,8 +31,8 @@ export default function NotFound() {
             <Link href="/" className="btn-prime btn-prime-lg">
               Back to Home
             </Link>
-            <Link href="/shop" className="btn-ghost">
-              Browse the Shop
+            <Link href="/collection" className="btn-ghost">
+              Browse Collection
             </Link>
           </div>
         </div>

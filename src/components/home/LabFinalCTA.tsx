@@ -18,8 +18,8 @@ export function LabFinalCTA() {
           already on its way.
         </Reveal>
         <Reveal as="div" className="ttl-cta__actions" delay={210}>
-          <Link href="/shop" className="ttl-btn ttl-btn--primary">
-            Shop all products <span aria-hidden="true">→</span>
+          <Link href="/collection" className="ttl-btn ttl-btn--primary">
+            Browse Collection <span aria-hidden="true">→</span>
           </Link>
           <Link href="/track-order" className="ttl-btn ttl-btn--ghost">
             Track an order

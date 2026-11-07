@@ -29,7 +29,7 @@ export function SiteChrome({
         <SiteHeader />
       </ShowOnSite>
       <main className="page-main">{children}</main>
-      <ShowOnSite exclude={["/mods/checkout", "/shop/checkout"]}>
+      <ShowOnSite exclude={["/mods/checkout", "/collection/checkout"]}>
         {footer}
       </ShowOnSite>
       <CartToaster />

@@ -25,23 +25,28 @@ export const SHOP_SECTIONS = {
 } as const;
 export type ShopSectionKey = keyof typeof SHOP_SECTIONS;
 
-/** Shared shop listing (sort bar + grid) used by /shop and each section route. */
+/** Shared shop listing (sort bar + grid) used by /collection and each section route. */
 export async function ShopCatalog({
   section,
   searchParams,
+  showAll = false,
 }: {
   section?: ShopSectionKey;
   searchParams: { sort?: string; page?: string };
+  showAll?: boolean;
 }) {
   const sort: ShopSort = SHOP_SORTS.includes(searchParams.sort as ShopSort)
     ? (searchParams.sort as ShopSort)
     : "newest";
-  const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
+  const page = showAll
+    ? 1
+    : Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
 
   const result = await getShopProducts({
     ...(section ? { productType: SHOP_SECTIONS[section] } : {}),
     sort,
     page,
+    ...(showAll ? { all: true } : {}),
   });
 
   return (

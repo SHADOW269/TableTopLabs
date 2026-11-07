@@ -42,7 +42,7 @@ export const getAdminBrands = defineCached(
   { tags: [TAG.brands], revalidate: TTL.catalog, keys: ["admin-brands"] },
 );
 
-// ─── Work / portfolio (admin content, same tag as the public /work feed) ────
+// ─── Work / portfolio (admin content, same tag as the public /showcase feed) ────
 
 export const getAdminWorkProjects = defineCached(
   () =>

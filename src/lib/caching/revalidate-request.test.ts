@@ -87,7 +87,7 @@ void (async () => {
   }
 
   {
-    assert.equal(parseRevalidateRequest({ paths: ["/work"] }).ok, true);
+    assert.equal(parseRevalidateRequest({ paths: ["/showcase"] }).ok, true);
     assert.equal(parseRevalidateRequest({ paths: "work" }).ok, false);
     assert.equal(parseRevalidateRequest({ paths: [123] }).ok, false);
     assert.equal(parseRevalidateRequest({ paths: ["work"] }).ok, false);
@@ -98,12 +98,12 @@ void (async () => {
   {
     const out = parseRevalidateRequest({
       tags: ["work", "work", "reviews"],
-      paths: ["/work", "/work"],
+      paths: ["/showcase", "/showcase"],
       ignored: "yes",
     });
     assert.equal(out.ok, true);
     assert.deepEqual(out.ok ? out.tags : null, ["work", "reviews"]);
-    assert.deepEqual(out.ok ? out.paths : null, ["/work"]);
+    assert.deepEqual(out.ok ? out.paths : null, ["/showcase"]);
     pass("duplicates are dropped and extra keys ignored");
   }
 

@@ -2,16 +2,21 @@ import type { NextConfig } from "next";
 
 const REDIRECTS: { source: string; destination: string; permanent: boolean }[] =
   [
-    // IA rename: /services, /repair → /workshop (Mods page removed from the
-    // storefront; its legacy URLs now resolve to the workshop page).
-    { source: "/services", destination: "/workshop", permanent: true },
-    { source: "/repair", destination: "/workshop", permanent: true },
-    // "Keyboards" category page removed from the storefront → shop index.
+    // Public route renames. Keep old canonical URLs redirecting to the new
+    // paths so existing links and search results keep working.
+    { source: "/shop", destination: "/collection", permanent: true },
+    // "Keyboards" category page removed from the storefront → collection index.
     {
       source: "/shop/mechanical-keyboards",
-      destination: "/shop",
+      destination: "/collection",
       permanent: false,
     },
+    { source: "/shop/:path*", destination: "/collection/:path*", permanent: true },
+    { source: "/workshop", destination: "/services", permanent: true },
+    { source: "/work", destination: "/showcase", permanent: true },
+    { source: "/work/:path*", destination: "/showcase/:path*", permanent: true },
+    // Legacy IA redirects now target the canonical services page.
+    { source: "/repair", destination: "/services", permanent: true },
     // Auth pages moved under /auth/* (old paths kept working via redirects).
     { source: "/login", destination: "/auth/login", permanent: false },
     { source: "/register", destination: "/auth/register", permanent: false },
@@ -21,8 +26,12 @@ const REDIRECTS: { source: string; destination: string; permanent: boolean }[] =
       permanent: false,
     },
     // Short/legacy URLs → canonical (single hop).
-    { source: "/cart", destination: "/shop/cart", permanent: false },
-    { source: "/checkout", destination: "/shop/checkout", permanent: false },
+    { source: "/cart", destination: "/collection/cart", permanent: false },
+    {
+      source: "/checkout",
+      destination: "/collection/checkout",
+      permanent: false,
+    },
     { source: "/profile", destination: "/account/profile", permanent: false },
     {
       source: "/account/addresses",
@@ -30,76 +39,76 @@ const REDIRECTS: { source: string; destination: string; permanent: boolean }[] =
       permanent: false,
     },
     // Old static site → new routes (flattened, no intermediate hops).
-    { source: "/keyboard-repair", destination: "/workshop", permanent: true },
-    { source: "/mouse-repair", destination: "/workshop", permanent: true },
-    { source: "/pricing", destination: "/workshop", permanent: true },
-    { source: "/order", destination: "/shop/checkout", permanent: true },
+    { source: "/keyboard-repair", destination: "/services", permanent: true },
+    { source: "/mouse-repair", destination: "/services", permanent: true },
+    { source: "/pricing", destination: "/services", permanent: true },
+    { source: "/order", destination: "/collection/checkout", permanent: true },
     { source: "/Terms&Conditions", destination: "/terms", permanent: true },
-    // Old service slugs → /workshop (D-022: per-service detail pages removed;
+    // Old service slugs → /services (D-022: per-service detail pages removed;
     // Mods page removed from the storefront).
     {
       source: "/keyboard-services/switch-lubing",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/switch-filming",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/stabilizer-tuning",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/soldering",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/desoldering",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/millmax-installation",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/hotswap-socket-repair",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/pcb-repair",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/firmware",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/keyboard-services/custom-keyboard-build",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/mouse-services/mouse-switch-replacement",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/mouse-services/mouse-encoder-replacement",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
     {
       source: "/mouse-services/mouse-diagnostics",
-      destination: "/workshop",
+      destination: "/services",
       permanent: true,
     },
   ];

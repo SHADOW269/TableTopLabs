@@ -49,7 +49,7 @@ export function LabValues({ num = "TableTopLabs" }: { num?: string }) {
         </div>
 
         <div className="ttl-values__cta">
-          <Link href="/shop" className="ttl-btn ttl-btn--primary">
+          <Link href="/collection" className="ttl-btn ttl-btn--primary">
             Browse the shop <span aria-hidden="true">→</span>
           </Link>
         </div>

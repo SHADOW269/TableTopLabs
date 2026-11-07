@@ -3,7 +3,7 @@ import { getRelatedProducts } from "@/lib/catalog/data";
 
 /** "You May Also Like" grid, rendered as its own RSC so it can be
  *  Suspense-streamed after the main product UI. The cards are the very same
- *  shop product cards used on /shop — the product page is the card opened
+ *  shop product cards used on /collection — the product page is the card opened
  *  out, so the grid must not diverge. */
 export async function RelatedProducts({
   productId,

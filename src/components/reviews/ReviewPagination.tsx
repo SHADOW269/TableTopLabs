@@ -24,7 +24,7 @@ function pageNumbers(current: number, total: number): (number | null)[] {
   return out;
 }
 
-/** Numeric review pagination (?rp=), shared by product pages and the /work feed. */
+/** Numeric review pagination (?rp=), shared by product pages and the /showcase feed. */
 export function ReviewPagination({
   basePath,
   current,

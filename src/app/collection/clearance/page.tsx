@@ -5,9 +5,9 @@ import { buildMetadata } from "@/lib/seo";
 import { SECTION_LABELS } from "@/lib/catalog/shop";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Clearance — Shop | TableTopLabs",
+  title: "Clearance — Collection | TableTopLabs",
   description: "Discounted, open-box and used keyboard gear at TableTopLabs.",
-  path: "/shop/clearance",
+  path: "/collection/clearance",
 });
 
 type Props = {
@@ -24,7 +24,7 @@ export default async function ClearancePage({ searchParams }: Props) {
         <div className="wrap">
           <p className="ttl-eyebrow">
             <span className="ttl-eyebrow__mark" aria-hidden="true" />
-            Shop
+            Collection
           </p>
           <h1 className="sec-title">{meta.title}</h1>
           <p className="sec-desc shop-desc">{meta.blurb}</p>
@@ -35,7 +35,7 @@ export default async function ClearancePage({ searchParams }: Props) {
           <ShopCatalog section="clearance" searchParams={sp} />
         </div>
       </section>
-      <BuildCta primaryHref="/workshop" />
+      <BuildCta primaryHref="/services" />
     </main>
   );
 }

@@ -1,7 +1,7 @@
 import { CtaSection } from "@/components/ui/CtaSection";
 
 export function BuildCta({
-  primaryHref = "/shop",
+  primaryHref = "/collection",
   primaryLabel = "Start a Project →",
   desc = "Have a keyboard that needs work or want something custom? Send it in and the TableTopLabs workshop will take it from there.",
   imageSrc = "/img/yellowkeys-image.png",

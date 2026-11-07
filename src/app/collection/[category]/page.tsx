@@ -31,9 +31,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // has a loading.tsx that would otherwise commit a 200 shell first (G-003).
   if (!cat) notFound();
   return buildMetadata({
-    title: `${cat.name} — Shop | TableTopLabs`,
-    description: `Shop ${cat.name.toLowerCase()} — keyboards, switches, keycaps and mods at TableTopLabs with India-wide shipping.`,
-    path: `/shop/${cat.slug}`,
+    title: `${cat.name} — Collection | TableTopLabs`,
+    description: `Browse ${cat.name.toLowerCase()} in our collection — keyboards, switches, keycaps and mods at TableTopLabs with India-wide shipping.`,
+    path: `/collection/${cat.slug}`,
   });
 }
 
@@ -60,10 +60,10 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   return (
     <main className="shop-page">
       <PageHero
-        tag="Shop"
+        tag="Collection"
         title={cat.name}
-        desc={`Browse ${cat.name.toLowerCase()} at TableTopLabs.`}
-        pills={["Category"]}
+        desc={`Browse ${cat.name.toLowerCase()} in our collection.`}
+        pills={["Collection"]}
       />
       <section className="svc-section">
         <div className="wrap">
@@ -81,11 +81,11 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           />
         </div>
       </section>
-      <BuildCta primaryHref="/workshop" />
+      <BuildCta primaryHref="/services" />
       <JsonLd
         data={breadcrumbJsonLd([
-          { name: "Shop", path: "/shop" },
-          { name: cat.name, path: `/shop/${cat.slug}` },
+          { name: "Collection", path: "/collection" },
+          { name: cat.name, path: `/collection/${cat.slug}` },
         ])}
       />
     </main>

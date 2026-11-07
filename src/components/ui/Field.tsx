@@ -2,7 +2,7 @@
 
 /**
  * Labeled form field scaffold: uppercase micro-label + control + optional
- * inline note. Shared by /workshop and /mods; the `kf-field` base class is the
+ * inline note. Shared by /services and /mods; the `kf-field` base class is the
  * ONE canonical field visual system both flows render. `className` carries
  * only layout hooks (grid span, spacing) — never page-specific field styling.
  * The host provides the control as `children`; the `.kf-field *` rules in

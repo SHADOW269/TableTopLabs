@@ -22,7 +22,7 @@ export const getModsCatalog = defineCached(
 
 // ─── Portfolio ───────────────────────────────────────────────────────────────
 
-/** Narrow select shared by /work and /work/[slug] — only the fields those
+/** Narrow select shared by /showcase and /showcase/[slug] — only the fields those
  *  public pages render (no huge markdown bodies fetched for the grid). */
 const workListSelect = {
   id: true,
@@ -47,7 +47,7 @@ export const getWorkProjectBySlug = defineCached(
   { tags: [TAG.work], revalidate: TTL.stable, keys: ["work-project-by-slug"] },
 );
 
-/** All active portfolio projects for /work. Admin-only edits. */
+/** All active portfolio projects for /showcase. Admin-only edits. */
 export const getWorkProjects = defineCached(
   () =>
     prisma.workProject.findMany({
@@ -102,6 +102,7 @@ export type ShopParams = {
   sort?: ShopSort;
   page?: number; // 1-based
   pageSize?: number;
+  all?: boolean; // return the entire result set in one page
 };
 
 const PRODUCT_LIST = {
@@ -162,6 +163,7 @@ const shopProducts = cache(async (params: ShopParams) => {
     sort = "newest",
     page = 1,
     pageSize = 24,
+    all = false,
   } = params;
 
   // ponytail: no product.active filter — shop shows all products incl. out-of-stock;
@@ -209,15 +211,14 @@ const shopProducts = cache(async (params: ShopParams) => {
     prisma.product.findMany({
       where,
       orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      ...(all ? {} : { skip: (page - 1) * pageSize, take: pageSize }),
       select: PRODUCT_LIST,
     }),
   ]).then(([total, items]) => ({
     items,
     total,
-    page,
-    pages: Math.max(1, Math.ceil(total / pageSize)),
+    page: all ? 1 : page,
+    pages: all ? 1 : Math.max(1, Math.ceil(total / pageSize)),
   }));
 });
 
@@ -245,6 +246,7 @@ export function getShopProducts(params: ShopParams) {
     sort: params.sort ?? "newest",
     page: params.page ?? 1,
     pageSize: params.pageSize ?? 24,
+    all: params.all ?? false,
   };
   const q = params.search?.trim();
   return q ? shopProducts({ ...key, search: q }) : cachedShopProducts(key);

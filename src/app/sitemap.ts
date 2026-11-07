@@ -11,14 +11,14 @@ const STATIC: {
   priority?: number;
 }[] = [
   { path: "/", priority: 1 },
-  { path: "/shop", priority: 0.9 },
-  { path: "/shop/products", priority: 0.7 },
-  { path: "/shop/clearance", priority: 0.7 },
-  { path: "/shop/custom", priority: 0.7 },
-  { path: "/workshop", priority: 0.8 },
+  { path: "/collection", priority: 0.9 },
+  { path: "/collection/products", priority: 0.7 },
+  { path: "/collection/clearance", priority: 0.7 },
+  { path: "/collection/custom", priority: 0.7 },
+  { path: "/services", priority: 0.8 },
   { path: "/about", priority: 0.5 },
   { path: "/faq", priority: 0.5 },
-  { path: "/work", priority: 0.7 },
+  { path: "/showcase", priority: 0.7 },
   { path: "/contact", priority: 0.5 },
   { path: "/track-order", priority: 0.5 },
   { path: "/privacy-policy", priority: 0.4 },
@@ -72,14 +72,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   });
 
   const categoryUrls = categories.map((c) => ({
-    url: `${SITE_URL}/shop/${c.slug}`,
+    url: `${SITE_URL}/collection/${c.slug}`,
     lastModified: c.createdAt,
     changeFrequency: "weekly" as const,
     priority: 0.7,
   }));
 
   const workUrls = work.map((w) => ({
-    url: `${SITE_URL}/work/${w.slug}`,
+    url: `${SITE_URL}/showcase/${w.slug}`,
     lastModified: w.updatedAt,
     changeFrequency: "monthly" as const,
     priority: 0.5,

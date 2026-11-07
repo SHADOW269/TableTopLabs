@@ -54,7 +54,7 @@ export function CartToaster() {
         {toast.count != null ? ` — ${toast.count} in cart` : ""}
       </p>
       <div className="cart-toaster-actions">
-        <Link href="/shop/cart" className="cart-toaster-view">
+        <Link href="/collection/cart" className="cart-toaster-view">
           View Cart
         </Link>
         <button

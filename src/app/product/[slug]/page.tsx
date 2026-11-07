@@ -73,7 +73,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       : undefined;
 
   return buildMetadata({
-    title: product.seoTitle ?? `${product.name} | TableTopLabs Shop`,
+    title: product.seoTitle ?? `${product.name} | TableTopLabs Collection`,
     description:
       product.seoDescription ??
       product.description ??
@@ -148,10 +148,10 @@ export default async function ProductPage({
       <div className="wrap page-start">
         <Breadcrumbs
           items={[
-            { name: "Shop", href: "/shop" },
+            { name: "Collection", href: "/collection" },
             {
               name: product.category.name,
-              href: `/shop/${product.category.slug}`,
+              href: `/collection/${product.category.slug}`,
             },
             { name: product.name },
           ]}
@@ -250,7 +250,7 @@ export default async function ProductPage({
               {!custom && (
                 <p className="ms-pdp__note">
                   Want this modified or part of a full build?{" "}
-                  <Link href="/workshop">Start a custom build →</Link>
+                  <Link href="/services">Start a custom build →</Link>
                 </p>
               )}
             </div>
@@ -420,15 +420,15 @@ export default async function ProductPage({
         </Suspense>
       </section>
 
-      <BuildCta primaryHref="/workshop" />
+      <BuildCta primaryHref="/services" />
 
       <JsonLd
         data={[
           breadcrumbJsonLd([
-            { name: "Shop", path: "/shop" },
+            { name: "Collection", path: "/collection" },
             {
               name: product.category.name,
-              path: `/shop/${product.category.slug}`,
+              path: `/collection/${product.category.slug}`,
             },
             { name: product.name, path: `/product/${product.slug}` },
           ]),

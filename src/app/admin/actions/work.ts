@@ -26,7 +26,7 @@ type ImageStateEntry = {
   fileIndex?: number;
 };
 
-const CLOSE_PATHS = ["/work", "/admin/work"];
+const CLOSE_PATHS = ["/showcase", "/admin/work"];
 
 export async function saveWork(
   _prev: ActionState,
@@ -166,7 +166,7 @@ export async function saveWork(
   }
 
   for (const path of CLOSE_PATHS) revalidatePath(path);
-  revalidatePath(`/work/${slug}`);
+  revalidatePath(`/showcase/${slug}`);
   revalidatePath("/admin/work");
   revalidatePath(`/admin/work/${projectId}`);
   revalidatePath("/admin/work/new");

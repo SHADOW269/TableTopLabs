@@ -85,8 +85,8 @@ export default async function OrdersPage() {
             <p className="account-empty-sub">
               Your completed orders will appear here.
             </p>
-            <Link href="/shop" className="btn-prime btn-sm">
-              Browse Shop →
+            <Link href="/collection" className="btn-prime btn-sm">
+              Browse Collection →
             </Link>
           </div>
         ) : (

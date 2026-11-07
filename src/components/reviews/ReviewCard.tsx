@@ -32,7 +32,7 @@ function authorName(
     : name || "Verified customer";
 }
 
-/** A single review card, shared by the product review grid and the /work feed. */
+/** A single review card, shared by the product review grid and the /showcase feed. */
 export function ReviewCard({
   review,
   verified,

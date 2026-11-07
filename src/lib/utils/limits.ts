@@ -49,7 +49,7 @@ export const MAX_INQUIRY_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
 export const MAX_REVIEW_TOTAL_IMAGE_BYTES = 16 * 1024 * 1024;
 export const MAX_REPAIR_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024;
 
-/** Canonical custom-work labels — the /workshop allow-list, shared with the server schema. */
+/** Canonical custom-work labels — the /services allow-list, shared with the server schema. */
 export const CUSTOM_WORK_TYPES = [
   "Custom Build",
   "Switch Modification",
@@ -64,7 +64,7 @@ export const CUSTOM_WORK_TYPES = [
   "Other",
 ] as const;
 
-/** Canonical repair-work labels — the /workshop allow-list, shared with the server schema. */
+/** Canonical repair-work labels — the /services allow-list, shared with the server schema. */
 export const REPAIR_WORK_TYPES = [
   "Not powering on",
   "Keys not working",
