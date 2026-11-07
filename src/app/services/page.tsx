@@ -3,6 +3,7 @@ import { buildMetadata, JsonLd, SITE_URL } from "@/lib/seo";
 import { getCurrentAuth } from "@/lib/auth/session";
 import { RepairIntake } from "@/components/repair/RepairIntake";
 import { BuildCta } from "@/components/ui/BuildCta";
+import { PageBanner } from "@/components/ui/PageBanner";
 
 export const metadata: Metadata = buildMetadata({
   title: "Keyboard Services — Repairs, Builds & Customization | TableTopLabs",
@@ -36,19 +37,11 @@ export default async function RepairPage() {
     <main className="work-page ri-page ri-page--v2">
       <JsonLd data={WORKSHOP_SERVICE_JSONLD} />
 
-      <section className="ri-hero-new">
-        <div className="work-wrap-new">
-          <div className="ri-hero-copy">
-            <p className="ri2-eyebrow">Services</p>
-            <h1 className="ri-hero-title-new">Keyboard Services</h1>
-            <p className="ri-hero-desc-new">
-              Custom builds, repairs, modifications, and technical services
-              for keyboards and desk setups — tell us what you&apos;re working
-              on and we&apos;ll help you figure out the next step.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageBanner
+        eyebrow="Services"
+        title="Keyboard Services"
+        description="Custom builds, repairs, modifications, and technical services for keyboards and desk setups — tell us what you're working on and we'll help you figure out the next step."
+      />
 
       <RepairIntake
         defaults={{

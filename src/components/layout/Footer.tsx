@@ -44,42 +44,29 @@ const SOCIAL_ICONS: Record<(typeof SOCIALS)[number]["label"], ReactNode> = {
 /* Only routes that actually exist — no invented URLs. */
 const GROUPS: { title: string; links: { href: string; label: string }[] }[] = [
   {
-    title: "Collection",
+    title: "Navigation",
     links: [
-      { href: "/collection", label: "Browse Collection" },
-      { href: "/collection/custom", label: "Made to Order" },
-      { href: "/collection/products", label: "New Products" },
-      { href: "/collection/clearance", label: "Clearance" },
+      { href: "/collection", label: "Collection" },
+      { href: "/services", label: "Services" },
+      { href: "/showcase", label: "Showcase" },
+      { href: "/collection/cart", label: "Cart" },
+      { href: "/account/profile", label: "Account" },
     ],
   },
   {
-    title: "Services",
+    title: "About Company",
     links: [
-      { href: "/services", label: "Keyboard Services" },
-      { href: "/track-order", label: "Track Order" },
-      { href: "/shipping-information", label: "Shipping" },
-      { href: "/returns-refunds", label: "Returns & Refunds" },
-    ],
-  },
-  {
-    title: "Showcase",
-    links: [
-      { href: "/showcase", label: "Featured Work" },
+      { href: "/about", label: "About TableTopLabs" },
       { href: "/contact", label: "Contact" },
       { href: "/faq", label: "FAQ" },
     ],
   },
   {
-    title: "About",
-    links: [
-      { href: "/about", label: "About TableTopLabs" },
-    ],
-  },
-  {
-    title: "Legal",
+    title: "Policy",
     links: [
       { href: "/privacy-policy", label: "Privacy Policy" },
       { href: "/terms", label: "Terms & Conditions" },
+      { href: "/returns-refunds", label: "Returns & Refunds" },
     ],
   },
 ];

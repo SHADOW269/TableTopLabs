@@ -24,7 +24,6 @@ const CATEGORY: Record<string, string> = {
   OTHER: "PROJECT",
 };
 
-const INITIAL_VISIBLE = 6;
 const DOT_GROUP_THRESHOLD = 9;
 
 function photoLabel(count: number) {
@@ -35,34 +34,68 @@ function excerpt(text: string, max = 150) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+function pageNumbers(current: number, total: number): (number | null)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const core = new Set([
+    1,
+    2,
+    current - 1,
+    current,
+    current + 1,
+    total - 1,
+    total,
+  ]);
+  const nums = [...core]
+    .filter((n) => n >= 1 && n <= total)
+    .sort((a, b) => a - b);
+  const out: (number | null)[] = [];
+  let prev = 0;
+  for (const n of nums) {
+    if (prev && n - prev > 1) out.push(null);
+    out.push(n);
+    prev = n;
+  }
+  return out;
+}
+
+interface WorkShowcaseProps {
+  works: WorkShowcaseItem[];
+  initialIndex?: number;
+  paginatedWorks?: WorkShowcaseItem[];
+  currentPage?: number;
+  totalPages?: number;
+  totalWorks?: number;
+}
+
 export function WorkShowcase({
   works,
   initialIndex = 0,
-}: {
-  works: WorkShowcaseItem[];
-  initialIndex?: number;
-}) {
+  paginatedWorks,
+  currentPage = 1,
+  totalPages = 1,
+  totalWorks = works.length,
+}: WorkShowcaseProps) {
   const [index, setIndex] = useState(() => {
     if (works.length === 0) return 0;
     return Math.min(Math.max(initialIndex, 0), works.length - 1);
   });
-  const [visibleCount, setVisibleCount] = useState(() =>
-    Math.min(INITIAL_VISIBLE, works.length),
-  );
 
   if (works.length === 0) return null;
 
   const total = works.length;
   const currentIndex = ((index % total) + total) % total;
   const featured = works[currentIndex];
-  const visibleWorks = works.slice(0, visibleCount);
-  const hasMore = visibleCount < total;
+
+  // Use paginated works if provided, otherwise fall back to old behavior
+  const visibleWorks = paginatedWorks ?? works;
+  const isPaginated = paginatedWorks !== undefined;
+  const displayCount = isPaginated ? visibleWorks.length : total;
+  const startCount = isPaginated ? (currentPage - 1) * 8 + 1 : 1;
+  const endCount = isPaginated ? startCount + displayCount - 1 : total;
 
   const hasNavigation = total > 1;
   const next = () => setIndex((i) => (i + 1) % total);
   const prev = () => setIndex((i) => (i - 1 + total) % total);
-  const loadMore = () =>
-    setVisibleCount((count) => Math.min(count + INITIAL_VISIBLE, total));
 
   // One dot per work for small collections; grouped pages for larger ones so
   // the indicator row never turns into a wall of tiny dots.
@@ -208,7 +241,7 @@ export function WorkShowcase({
             All Projects
           </h2>
           <p className="work-all-count">
-            Showing {visibleCount} of {total} works
+            Showing {startCount}–{Math.min(endCount, totalWorks)} of {totalWorks} works
           </p>
         </div>
 
@@ -227,7 +260,7 @@ export function WorkShowcase({
                       src={project.image}
                       alt={project.title}
                       fill
-                      sizes="(min-width: 1100px) 33vw, (min-width: 700px) 50vw, 92vw"
+                      sizes="(min-width: 1100px) 23vw, (min-width: 700px) 50vw, 92vw"
                       style={{ objectFit: "cover", objectPosition: "center" }}
                     />
                   ) : (
@@ -253,12 +286,60 @@ export function WorkShowcase({
           ))}
         </div>
 
-        {hasMore && (
-          <div className="work-all-more">
-            <button type="button" className="work-load-more" onClick={loadMore}>
-              Load More <span aria-hidden="true">↓</span>
-            </button>
-          </div>
+        {isPaginated && totalPages > 1 && (
+          <nav className="work-pagination" aria-label="Projects pagination">
+            {currentPage > 1 ? (
+              <Link
+                className="work-page work-page-arrow"
+                href={`/showcase?rp=${currentPage - 1}`}
+                aria-label="Previous page"
+              >
+                ←
+              </Link>
+            ) : (
+              <span
+                className="work-page work-page-arrow is-disabled"
+                aria-hidden="true"
+              >
+                ←
+              </span>
+            )}
+            {pageNumbers(currentPage, totalPages).map((n, i) =>
+              n === null ? (
+                <span
+                  key={`e${i}`}
+                  className="work-page-ellipsis"
+                  aria-hidden="true"
+                >
+                  …
+                </span>
+              ) : n === currentPage ? (
+                <span key={n} className="work-page is-active" aria-current="page">
+                  {n}
+                </span>
+              ) : (
+                <Link key={n} className="work-page" href={`/showcase?rp=${n}`}>
+                  {n}
+                </Link>
+              ),
+            )}
+            {currentPage < totalPages ? (
+              <Link
+                className="work-page work-page-arrow"
+                href={`/showcase?rp=${currentPage + 1}`}
+                aria-label="Next page"
+              >
+                →
+              </Link>
+            ) : (
+              <span
+                className="work-page work-page-arrow is-disabled"
+                aria-hidden="true"
+              >
+                →
+              </span>
+            )}
+          </nav>
         )}
       </section>
     </>

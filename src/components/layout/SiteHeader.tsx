@@ -110,7 +110,7 @@ export function SiteHeader() {
   return (
     <>
       <nav
-        className={`nav${scrolled ? " scrolled" : ""}`}
+        className={`site-header nav${scrolled ? " scrolled" : ""}`}
         aria-label="Main navigation"
       >
         <div className="nav-inner">
