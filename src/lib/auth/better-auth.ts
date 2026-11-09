@@ -20,7 +20,7 @@ import { resendErrorDiagnostic } from "@/lib/notifications/resend-diagnostics";
  * TableTopLabs authentication — Better Auth (sole auth authority).
  * Database: Prisma → Supabase PostgreSQL. Media: Cloudinary. Email: Resend.
  *
- * Social providers (Google/Discord) only activate when their client ID/secret
+ * Social providers (Google) only activate when their client ID/secret
  * are set in .env — blank values are omitted so dev still boots.
  */
 export const auth = betterAuth({
@@ -144,10 +144,6 @@ export const auth = betterAuth({
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    },
-    discord: {
-      clientId: process.env.DISCORD_CLIENT_ID ?? "",
-      clientSecret: process.env.DISCORD_CLIENT_SECRET ?? "",
     },
   },
   trustedOrigins: [

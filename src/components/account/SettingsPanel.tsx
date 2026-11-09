@@ -207,7 +207,7 @@ export function SettingsPanel({ newsletter, hasPassword }: SettingsPanelProps) {
           <div className="account-settings-item">
             <div>
               <h3>Connected Accounts</h3>
-              <p>Manage Google and Discord sign-in methods</p>
+              <p>Manage Google sign-in methods</p>
             </div>
             <button
               type="button"

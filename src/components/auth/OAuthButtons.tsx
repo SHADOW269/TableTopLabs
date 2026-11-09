@@ -28,29 +28,14 @@ const PROVIDERS = [
       </svg>
     ),
   },
-  {
-    id: "discord",
-    label: "Discord",
-    icon: (
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="#5865F2"
-        aria-hidden="true"
-      >
-        <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.6 1.2a18.3 18.3 0 0 0-5.6 0L8.6 3a19.8 19.8 0 0 0-4.9 1.4A20.4 20.4 0 0 0 .2 18.1a19.9 19.9 0 0 0 6 3l1.3-2a12.9 12.9 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4a12.9 12.9 0 0 1-2 1l1.3 2a19.9 19.9 0 0 0 6-3 20.3 20.3 0 0 0-3.9-13.7ZM8.6 15.3c-1.2 0-2.1-1-2.1-2.3s.9-2.3 2.1-2.3 2.1 1 2.1 2.3-.9 2.3-2.1 2.3Zm6.8 0c-1.2 0-2.1-1-2.1-2.3s.9-2.3 2.1-2.3 2.1 1 2.1 2.3-.9 2.3-2.1 2.3Z" />
-      </svg>
-    ),
-  },
 ] as const;
 
-/** Shared Google/Discord buttons on the auth pages — existing Better Auth handlers only. */
+/** Shared Google button on the auth pages — existing Better Auth handlers only. */
 export function OAuthButtons() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function social(provider: "google" | "discord") {
+  async function social(provider: "google") {
     setBusy(true);
     setError(null);
     try {
